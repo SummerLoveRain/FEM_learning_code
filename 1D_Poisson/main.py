@@ -37,13 +37,13 @@ def source_function(x):
 if __name__ == '__main__':
     a = 0.0
     b = 1.0
-    Gaussian_Integral_N = 3
+    Gaussian_Integral_1D_N = 3
     Nh = 6
     
     for i in range(Nh):
         number_of_elements = 2**(i+2)
         solver = Possion_1D_FE_solver_Dirichlet(a, b, coefficient_function, source_function, number_of_elements=number_of_elements, \
-                                      basis_function_type_trial=Basis.QUADRATIC, basis_function_type_test=Basis.QUADRATIC, Gaussian_Integral_N=Gaussian_Integral_N)
+                                      basis_function_type_trial=Basis.QUADRATIC, basis_function_type_test=Basis.QUADRATIC, Gaussian_Integral_1D_N=Gaussian_Integral_1D_N)
         x = np.linspace(a,b,2*number_of_elements+1)
         # test_number = 100
         # x = np.linspace(a,b,test_number+1)
@@ -63,7 +63,7 @@ if __name__ == '__main__':
     for i in range(Nh):
         number_of_elements = 2**(i+2)
         solver = Possion_1D_FE_solver_Neumann(a, b, coefficient_function, source_function, number_of_elements=number_of_elements, \
-                                      basis_function_type_trial=Basis.QUADRATIC, basis_function_type_test=Basis.QUADRATIC, Gaussian_Integral_N=Gaussian_Integral_N)
+                                      basis_function_type_trial=Basis.QUADRATIC, basis_function_type_test=Basis.QUADRATIC, Gaussian_Integral_1D_N=Gaussian_Integral_1D_N)
         x = np.linspace(a,b,2*number_of_elements+1)
         # test_number = 100
         # x = np.linspace(a,b,test_number+1)
@@ -83,7 +83,7 @@ if __name__ == '__main__':
     for i in range(Nh):
         number_of_elements = 2**(i+2)
         solver = Possion_1D_FE_solver_Robin(a, b, coefficient_function, source_function, number_of_elements=number_of_elements, \
-                                      basis_function_type_trial=Basis.QUADRATIC, basis_function_type_test=Basis.QUADRATIC, Gaussian_Integral_N=Gaussian_Integral_N)
+                                      basis_function_type_trial=Basis.QUADRATIC, basis_function_type_test=Basis.QUADRATIC, Gaussian_Integral_1D_N=Gaussian_Integral_1D_N)
         x = np.linspace(a,b, 3*number_of_elements+1)
         # test_number = 100
         # x = np.linspace(a,b,test_number+1)

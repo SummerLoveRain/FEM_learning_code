@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.sparse import csr_matrix, lil_matrix
-from integration import Gaussian_Integral
+from integration import Gaussian_Integral_1D
 from basis import affine_x
 
 class Boundary:
@@ -9,7 +9,7 @@ class Boundary:
     ROBIN_BOUNDARY = 2
 
 def assemble_matrix_A_1D(P, T, Tb_trial, Tb_test, coefficient_function, basis_function_trial, basis_function_test, \
-                         derivative_order_trial, derivative_order_test, Gaussian_Integral_N=3):
+                         derivative_order_trial, derivative_order_test, Gaussian_Integral_1D_N=3):
     '''
     P: Information matrix to store the coordinates of the mesh node
     T: Information matrix to store the global node indices of the mesh nodes of the mesh element
@@ -20,7 +20,7 @@ def assemble_matrix_A_1D(P, T, Tb_trial, Tb_test, coefficient_function, basis_fu
     basis_function_test: The basis functions in the test space
     derivative_order_trial: The derivative order of the trial function
     derivative_order_test: The derivative order of the test function
-    Gaussian_Integral_N: The number of points which is used in Gaussian Integral and the default value is 3 
+    Gaussian_Integral_1D_N: The number of points which is used in Gaussian Integral and the default value is 3 
     return A: stiffness matrix A
     '''
 
@@ -50,17 +50,17 @@ def assemble_matrix_A_1D(P, T, Tb_trial, Tb_test, coefficient_function, basis_fu
                         affine_x(x_i, x_ip, x, derivative_order=derivative_order_trial) * \
                         affine_x(x_i, x_ip, x, derivative_order=derivative_order_test)
                 # Gaussian Integral
-                integral = Gaussian_Integral(x_i, x_ip, f_integral, Gaussian_Integral_N)
+                integral = Gaussian_Integral_1D(x_i, x_ip, f_integral, Gaussian_Integral_1D_N)
                 A[Tb_test[i, beta], Tb_trial[i, alpha]] += integral
     return A
 
-def assemble_vector_b_1D(P, T, Tb_test, source_function, basis_function_test, Gaussian_Integral_N=3):
+def assemble_vector_b_1D(P, T, Tb_test, source_function, basis_function_test, Gaussian_Integral_1D_N=3):
     '''
     P: Information matrix to store the coordinates of the mesh node
     T: Information matrix to store the global node indices of the mesh nodes of the mesh element
     Tb_test: Information matrix for the finite element nodes corresponding to the basis functions in the test space
     basis_function_test: The basis functions in the test space
-    Gaussian_Integral_N: The number of points which is used in Gaussian Integral and the default value is 3 
+    Gaussian_Integral_1D_N: The number of points which is used in Gaussian Integral and the default value is 3 
     return b: load vector b
     '''
     # N_test:  the total number of the finite element basis functions in the test space
@@ -79,7 +79,7 @@ def assemble_vector_b_1D(P, T, Tb_test, source_function, basis_function_test, Ga
             f_integral = lambda x : source_function(x) * \
                     basis_function_test(affine_x(x_i, x_ip, x, derivative_order=0), beta, 0)
             # Gaussian Integral
-            integral = Gaussian_Integral(x_i, x_ip, f_integral, Gaussian_Integral_N)
+            integral = Gaussian_Integral_1D(x_i, x_ip, f_integral, Gaussian_Integral_1D_N)
             b[Tb_test[i, beta], 0] += integral
     return b
 

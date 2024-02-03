@@ -3,7 +3,7 @@ class Basis:
     QUADRATIC = 'quadratic'
     CUBIC = 'cubic'
 
-def basis_local_linear_1D(x, basis_index, derivative_order):
+def basis_reference_linear_1D(x, basis_index, derivative_order):
     '''
     x : coordinate
     basis_index : 0 left, 1 right
@@ -32,7 +32,7 @@ def basis_local_linear_1D(x, basis_index, derivative_order):
         ValueError("The index of basis function is not correct!")
     return result
 
-def basis_local_quadratic_1D(x, basis_index, derivative_order):
+def basis_reference_quadratic_1D(x, basis_index, derivative_order):
     '''
     x : coordinate
     basis_index : 0 left, 1 middle, 2 right
@@ -77,7 +77,7 @@ def basis_local_quadratic_1D(x, basis_index, derivative_order):
     return result
 
 
-# def basis_local_cubic_1D(x, basis_index, derivative_order):
+# def basis_reference_cubic_1D(x, basis_index, derivative_order):
 #     '''
 #     x : coordinate
 #     basis_index : 0 left, 1 middle, 2 right
