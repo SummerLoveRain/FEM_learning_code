@@ -229,7 +229,7 @@ def basis_triangular_reference_quadratic_2D(x, y, basis_index, derivative_order_
         if derivative_order_x == 0 and derivative_order_y == 0:
             result = 2*x**2 - x
         elif derivative_order_x == 1 and derivative_order_y == 0:
-            result = 4*x
+            result = 4*x - 1
         elif derivative_order_x == 2 and derivative_order_y == 0:
             result = 4
         elif ((derivative_order_y > 0) or (derivative_order_x > 2)) and type(derivative_order_x)==int and type(derivative_order_y)==int:

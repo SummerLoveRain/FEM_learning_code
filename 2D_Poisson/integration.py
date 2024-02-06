@@ -1,7 +1,10 @@
 import numpy as np
 
+class integration:
+    INTEGRATION = 1
+    MAX = 2
 
-def Gaussian_Integral_1D(a, b, f, n):
+def Gaussian_Integral_1D(a, b, f, n, integration_type = integration.INTEGRATION):
     '''
     a : the lower bound.
     b : the upper bound.
@@ -1096,7 +1099,12 @@ def Gaussian_Integral_1D(a, b, f, n):
             0.028784707883323,
             0.018466468311091,
             0.007968192496167],dtype=np.float64)
-    integral = (b-a)/2 * np.sum(weights * f(shift_x(nodes)))
+    if integration_type == integration.INTEGRATION:
+        integral = (b-a)/2 * np.sum(weights * f(shift_x(nodes)))
+    elif integration_type == integration.MAX:
+        integral = np.max(f(shift_x(nodes)))
+    else:
+        ValueError("The integration type is not correct!")
     return integral
 
 # # Test Gauassian_Integral_1D
@@ -1113,7 +1121,7 @@ def Gaussian_Integral_1D(a, b, f, n):
 #     integral = Gaussian_Integral_1D(a, b, f, n)
 #     print('n:%d I: %f integral: %f error: %10.6e' % (n, I, integral, abs(I-integral)))
 
-def Gaussian_Integral_triangular_2D(vertices, f, n):
+def Gaussian_Integral_triangular_2D(vertices, f, n, integration_type=integration.INTEGRATION):
     # x : coordinate
     # y : coordinate
     # vertices: the coordinates of the triangle
@@ -1398,7 +1406,12 @@ def Gaussian_Integral_triangular_2D(vertices, f, n):
         ],dtype=np.float64)
     else:
         ValueError("The number of n=%d exceeds the limit!" % n)
-    integral = np.sum(0.5 * weights * f(*shift_xy(nodes))) * J
+    if integration_type == integration.INTEGRATION:
+        integral = np.sum(0.5 * weights * f(*shift_xy(nodes))) * J
+    elif integration_type == integration.MAX:
+        integral = np.max(f(*shift_xy(nodes)))
+    else:
+        ValueError("The integration type is not correct!")
     return integral
 
 # # Test Gaussian_Integral_triangular_2D

@@ -86,7 +86,7 @@ def treat_Neumann_boundary_2D(P, T, Pb, Tb, A, b, boundary_edges, coefficient_fu
         if boundary_edges[i, 0] == Boundary.NEUMANN_BOUNDARY:
             j = boundary_edges[i, 1]
             index1 = boundary_edges[i, 2]
-            index2 = boundary_edges[i, -1]        
+            index2 = boundary_edges[i, 3]        
             x1 = Pb[index1, 0]
             y1 = Pb[index1, 1]
             x2 = Pb[index2, 0]
@@ -134,7 +134,7 @@ def treat_Robin_boundary_2D(P, T, Pb, Tb, A, b, boundary_edges, coefficient_func
         if boundary_edges[i, 0] == Boundary.ROBIN_BOUNDARY:
             j = boundary_edges[i, 1]
             index1 = boundary_edges[i, 2]
-            index2 = boundary_edges[i, -1]        
+            index2 = boundary_edges[i, 3]    
             x1 = Pb[index1, 0]
             y1 = Pb[index1, 1]
             x2 = Pb[index2, 0]
@@ -171,12 +171,6 @@ def treat_Robin_boundary_2D(P, T, Pb, Tb, A, b, boundary_edges, coefficient_func
                 
                 for l in range(Nl):                
                     if x1==x2:
-                        if y1<=y2:
-                            lower_bound = y1
-                            upper_bound = y2
-                        else:
-                            lower_bound = y2
-                            upper_bound = y1
                         def f_integral(y): 
                             x = x1
                             new_x, new_y = affine_triangular_xy(x, y, vertices, derivative_order_x=0, derivative_order_y=0)
@@ -185,12 +179,6 @@ def treat_Robin_boundary_2D(P, T, Pb, Tb, A, b, boundary_edges, coefficient_func
                                 basis_function(new_x, new_y, l, derivative_order_x=0, derivative_order_y=0)
                             return result
                     elif y1==y2:
-                        if x1<=x2:
-                            lower_bound = x1
-                            upper_bound = x2
-                        else:
-                            lower_bound = x2
-                            upper_bound = x1
                         def f_integral(x): 
                             y = y1
                             new_x, new_y = affine_triangular_xy(x, y, vertices, derivative_order_x=0, derivative_order_y=0)

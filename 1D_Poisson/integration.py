@@ -1,7 +1,10 @@
 import numpy as np
 
+class integration:
+    INTEGRATION = 1
+    MAX = 2
 
-def Gaussian_Integral_1D(a, b, f, n):
+def Gaussian_Integral_1D(a, b, f, n, integration_type = integration.INTEGRATION):
     '''
     a : the lower bound.
     b : the upper bound.
@@ -1096,10 +1099,15 @@ def Gaussian_Integral_1D(a, b, f, n):
             0.028784707883323,
             0.018466468311091,
             0.007968192496167],dtype=np.float64)
-    integral = (b-a)/2 * np.sum(weights * f(shift_x(nodes)))
+    if integration_type == integration.INTEGRATION:
+        integral = (b-a)/2 * np.sum(weights * f(shift_x(nodes)))
+    elif integration_type == integration.MAX:
+        integral = np.max(f(shift_x(nodes)))
+    else:
+        ValueError("The integration type is not correct!")
     return integral
 
-# # Test Gauassian_Integral
+# # Test Gauassian_Integral_1D
 # a = 1
 # b = 2
 # for i in range(30):

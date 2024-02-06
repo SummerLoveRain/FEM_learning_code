@@ -3,6 +3,7 @@ import numpy as np
 import scipy
 from basis import basis_triangular_reference_linear_2D, basis_triangular_reference_quadratic_2D, Basis
 from fem import *
+from integration import integration, Gaussian_Integral_triangular_2D
 
 class Base_2D_Solver:
     def __init__(self, bounds, Nx, Ny, basis_function_type, Gaussian_Integral_triangular_2D_N=10):
@@ -187,19 +188,32 @@ class Base_2D_Solver:
         '''
         print("solve for uh!")
 
-    def L_infinity_error(self, u_func, x=None, y=None):
+    def L_infinity_error(self, u_func):
         '''
         u_func: The function of exact solution
         compute the L-infinity error
         '''
-        if x is None or y is None:
-            Pb, _ = self.generate_Pb_Tb()
-            x = Pb[:, 0]
-            y = Pb[:, 1]
-        u = u_func(x, y, derivative_order_x=0, derivative_order_y=0)
-        uh = self.solve_xy(x, y)
-        # uh = self.solve()
-        error = np.max(np.abs(u-uh))
+        if self.uh is None:
+            self.uh = self.solve()
+        P, T = self.generate_P_T()
+        Pb, Tb = self.generate_Pb_Tb()
+        Nl = Tb.shape[1]
+
+        Nb = T.shape[0]
+        error=0.0
+        for i in range(Nb):
+            vertices = np.array([[P[T[i, 0], 0], P[T[i, 0], 1]], [P[T[i, 1], 0], P[T[i, 1], 1]], [P[T[i, 2], 0], P[T[i, 2], 1]]])
+            def uh_func(x, y):
+                uh = 0.0
+                new_x, new_y = affine_triangular_xy(x, y, vertices, derivative_order_x=0, derivative_order_y=0)
+                for j in range(Nl):
+                    uh += self.uh[Tb[i, j]]*self.basis_function(new_x, new_y, j, derivative_order_x=0, derivative_order_y=0)
+                return uh
+            f_integral = lambda x ,y: np.abs(u_func(x, y, derivative_order_x=0, derivative_order_y=0) - uh_func(x, y))
+            # Gaussian Integral
+            integral = Gaussian_Integral_triangular_2D(vertices, f_integral, self.Gaussian_Integral_triangular_2D_N, integration_type=integration.MAX)
+            if integral>error:
+                error = integral
         return error
         
 
@@ -435,7 +449,7 @@ class Possion_2D_FE_solver_Dirichlet(Base_2D_Solver):
                 boundary_edges[i, 1] = n
                 boundary_edges[i, 2] = Tb[n, 2]
                 boundary_edges[i, 3] = Tb[n, 0]
-                boundary_edges[i, 4] = Tb[n, 3]
+                boundary_edges[i, 4] = Tb[n, 5]
             elif i>=2*self.Nx+self.Ny and i<2*self.Nx+2*self.Ny:
                 # number of the element
                 n = 2*(self.Ny-(i-self.Nx-self.Nx-self.Ny))-1
@@ -554,7 +568,7 @@ class Possion_2D_FE_solver_Neumann(Base_2D_Solver):
                 # number of the element
                 n = i*(2*self.Ny) + 1
                 n = n-1
-                boundary_edges[i, 0] = Boundary.DIRICHLET_BOUNDARY
+                boundary_edges[i, 0] = Boundary.NEUMANN_BOUNDARY
                 boundary_edges[i, 1] = n
                 boundary_edges[i, 2] = Tb[n, 0]
                 boundary_edges[i, 3] = Tb[n, 1]
@@ -576,7 +590,7 @@ class Possion_2D_FE_solver_Neumann(Base_2D_Solver):
                 boundary_edges[i, 1] = n
                 boundary_edges[i, 2] = Tb[n, 2]
                 boundary_edges[i, 3] = Tb[n, 0]
-                boundary_edges[i, 4] = Tb[n, 3]
+                boundary_edges[i, 4] = Tb[n, 5]
             elif i>=2*self.Nx+self.Ny and i<2*self.Nx+2*self.Ny:
                 # number of the element
                 n = 2*(self.Ny-(i-self.Nx-self.Nx-self.Ny))-1
@@ -595,9 +609,9 @@ class Possion_2D_FE_solver_Neumann(Base_2D_Solver):
         A = assemble_matrix_A_2D(P, T, Pb, Tb, self.coefficient_function, self.basis_function, \
                         Gaussian_Integral_triangular_2D_N=self.Gaussian_Integral_triangular_2D_N)
         b = assemble_vector_b_2D(P, T, Tb, self.source_function, self.basis_function, Gaussian_Integral_triangular_2D_N=self.Gaussian_Integral_triangular_2D_N)
-        A, b = treat_Dirichlet_boundary_2D(Pb, Tb, A, b, boundary_edges, self.dirichlet_boundary)
         A, b = treat_Neumann_boundary_2D(P, T, Pb, Tb, A, b, boundary_edges, self.coefficient_function, \
                                            self.neumann_boundary, self.basis_function, self.Gaussian_Integral_triangular_2D_N)
+        A, b = treat_Dirichlet_boundary_2D(Pb, Tb, A, b, boundary_edges, self.dirichlet_boundary)
         uh = scipy.sparse.linalg.spsolve(A.tocsc(), b.tocsc())
         # uh = scipy.sparse.linalg.lsqr(A.tocsc(), b.tocsc())
         return uh
@@ -664,7 +678,7 @@ class Possion_2D_FE_solver_Robin(Base_2D_Solver):
                 # number of the element
                 n = i*(2*self.Ny) + 1
                 n = n-1
-                boundary_edges[i, 0] = Boundary.NEUMANN_BOUNDARY
+                boundary_edges[i, 0] = Boundary.ROBIN_BOUNDARY
                 boundary_edges[i, 1] = n
                 boundary_edges[i, 2] = Tb[n, 0]
                 boundary_edges[i, 3] = Tb[n, 1]
@@ -704,7 +718,7 @@ class Possion_2D_FE_solver_Robin(Base_2D_Solver):
                 # number of the element
                 n = i*(2*self.Ny) + 1
                 n = n-1
-                boundary_edges[i, 0] = Boundary.DIRICHLET_BOUNDARY
+                boundary_edges[i, 0] = Boundary.ROBIN_BOUNDARY
                 boundary_edges[i, 1] = n
                 boundary_edges[i, 2] = Tb[n, 0]
                 boundary_edges[i, 3] = Tb[n, 1]
@@ -726,7 +740,7 @@ class Possion_2D_FE_solver_Robin(Base_2D_Solver):
                 boundary_edges[i, 1] = n
                 boundary_edges[i, 2] = Tb[n, 2]
                 boundary_edges[i, 3] = Tb[n, 0]
-                boundary_edges[i, 4] = Tb[n, 3]
+                boundary_edges[i, 4] = Tb[n, 5]
             elif i>=2*self.Nx+self.Ny and i<2*self.Nx+2*self.Ny:
                 # number of the element
                 n = 2*(self.Ny-(i-self.Nx-self.Nx-self.Ny))-1
@@ -745,9 +759,9 @@ class Possion_2D_FE_solver_Robin(Base_2D_Solver):
         A = assemble_matrix_A_2D(P, T, Pb, Tb, self.coefficient_function, self.basis_function, \
                         Gaussian_Integral_triangular_2D_N=self.Gaussian_Integral_triangular_2D_N)
         b = assemble_vector_b_2D(P, T, Tb, self.source_function, self.basis_function, Gaussian_Integral_triangular_2D_N=self.Gaussian_Integral_triangular_2D_N)
-        A, b = treat_Dirichlet_boundary_2D(Pb, Tb, A, b, boundary_edges, self.dirichlet_boundary)
         A, b = treat_Robin_boundary_2D(P, T, Pb, Tb, A, b, boundary_edges, self.coefficient_function, \
                                            self.robin_boundary, self.basis_function, self.Gaussian_Integral_triangular_2D_N)
+        A, b = treat_Dirichlet_boundary_2D(Pb, Tb, A, b, boundary_edges, self.dirichlet_boundary)
         uh = scipy.sparse.linalg.spsolve(A.tocsc(), b.tocsc())
         # uh = scipy.sparse.linalg.lsqr(A.tocsc(), b.tocsc())
         return uh

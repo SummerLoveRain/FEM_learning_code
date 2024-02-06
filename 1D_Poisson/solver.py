@@ -2,6 +2,7 @@ import numpy as np
 import scipy
 from basis import basis_reference_linear_1D, basis_reference_quadratic_1D, Basis
 from fem import *
+from integration import integration, Gaussian_Integral_1D
 
 class Base_1D_Solver:
     def __init__(self, a, b, number_of_elements, basis_function_type_trial, basis_function_type_test, Gaussian_Integral_1D_N=3):
@@ -103,17 +104,36 @@ class Base_1D_Solver:
         '''
         print("solve for uh!")
 
-    def L_infinity_error(self, u_func, x=None):
+    def L_infinity_error(self, u_func):
         '''
         u_func: The function of exact solution
         compute the L-infinity error
-        if x is None, compute the L-infinity error on all elements
         '''
-        if x is None:
-            x, _ = self.generate_Pb_Tb_trial()
-        u = u_func(x)
-        uh = self.solve_x(x)
-        error = np.max(np.abs(u-uh))
+
+        if self.uh is None:
+            self.uh = self.solve()
+        P, T = self.generate_P_T()
+        Pb_trial, Tb_trial = self.generate_Pb_Tb_trial()
+        # N_trial:  the total number of the trial functions in the local space
+        N_local_trial = Tb_trial.shape[1]
+
+        number_of_elements = T.shape[0]
+        error = 0.0
+
+        for i in range(number_of_elements):
+            # lower bound
+            x_i = P[T[i, 0]]
+            # upper bound
+            x_ip = P[T[i, 1]]
+            def uh_func(x):
+                uh = 0.0
+                for alpha in range(N_local_trial):
+                    uh += self.uh[Tb_trial[i, alpha]]*self.basis_function_trial(affine_x(x_i, x_ip, x, derivative_order=0), alpha, derivative_order=0)
+                return uh
+            f_integral = lambda x : np.abs(u_func(x) - uh_func(x))
+            # Gaussian Integral
+            integral = Gaussian_Integral_1D(x_i, x_ip, f_integral, self.Gaussian_Integral_1D_N, integration_type=integration.MAX)
+            error += integral
         return error
         
 
@@ -341,8 +361,8 @@ class Possion_1D_FE_solver_Neumann(Base_1D_Solver):
         A = assemble_matrix_A_1D(P, T, Tb_trial, Tb_test, self.coefficient_function, self.basis_function_trial, self.basis_function_test, \
                         derivative_order_trial, derivative_order_test, Gaussian_Integral_1D_N=self.Gaussian_Integral_1D_N)
         b = assemble_vector_b_1D(P, T, Tb_test, self.source_function, self.basis_function_test, Gaussian_Integral_1D_N=self.Gaussian_Integral_1D_N)
-        A, b = treat_Dirichlet_boundary_1D(Pb_trial, A, b, boundary_nodes, self.dirichlet_boundary)
         A, b = treat_Neumann_boundary_1D(Pb_trial, Tb_test, A, b, boundary_nodes, self.coefficient_function, self.neumann_boundary, self.basis_function_test)
+        A, b = treat_Dirichlet_boundary_1D(Pb_trial, A, b, boundary_nodes, self.dirichlet_boundary)
         uh = scipy.sparse.linalg.spsolve(A.tocsc(), b.tocsc())
         # uh = scipy.sparse.linalg.lsqr(A.tocsc(), b.tocsc())
         return uh
@@ -417,9 +437,9 @@ class Possion_1D_FE_solver_Robin(Base_1D_Solver):
         A = assemble_matrix_A_1D(P, T, Tb_trial, Tb_test, self.coefficient_function, self.basis_function_trial, self.basis_function_test, \
                         derivative_order_trial, derivative_order_test, Gaussian_Integral_1D_N=self.Gaussian_Integral_1D_N)
         b = assemble_vector_b_1D(P, T, Tb_test, self.source_function, self.basis_function_test, Gaussian_Integral_1D_N=self.Gaussian_Integral_1D_N)
-        A, b = treat_Dirichlet_boundary_1D(Pb_trial, A, b, boundary_nodes, self.dirichlet_boundary)
         A, b = treat_Robin_boundary_1D(Pb_trial, Tb_trial, Tb_test, A, b, boundary_nodes, self.coefficient_function, \
                                        self.robin_boundary_p, self.robin_boundary_q, self.basis_function_trial, self.basis_function_test)
+        A, b = treat_Dirichlet_boundary_1D(Pb_trial, A, b, boundary_nodes, self.dirichlet_boundary)
         uh = scipy.sparse.linalg.spsolve(A.tocsc(), b.tocsc())
         # uh = scipy.sparse.linalg.lsqr(A.tocsc(), b.tocsc())
         return uh

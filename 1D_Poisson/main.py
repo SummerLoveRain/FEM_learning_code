@@ -43,15 +43,7 @@ if __name__ == '__main__':
     for i in range(Nh):
         number_of_elements = 2**(i+2)
         solver = Possion_1D_FE_solver_Dirichlet(a, b, coefficient_function, source_function, number_of_elements=number_of_elements, \
-                                      basis_function_type_trial=Basis.QUADRATIC, basis_function_type_test=Basis.QUADRATIC, Gaussian_Integral_1D_N=Gaussian_Integral_1D_N)
-        x = np.linspace(a,b,2*number_of_elements+1)
-        # test_number = 100
-        # x = np.linspace(a,b,test_number+1)
-        # x = 0.65
-        # u_pred_quadratic = solver.solve()
-        # u_pred_quadratic = solver.solve_x(x)
-        # u_true = Exact_u(x)        
-
+                                      basis_function_type_trial=Basis.LINEAR, basis_function_type_test=Basis.LINEAR, Gaussian_Integral_1D_N=Gaussian_Integral_1D_N)
         # 打印误差        
         log_str = 'n %5d L_infinity: %10.6e L2: %10.6e H1: %10.6e H1-semi: %10.6e' % (number_of_elements, solver.L_infinity_error(Exact_u), solver.L2_error(Exact_u), \
                                                                                 solver.H1_error(Exact_u, Exact_u_derivative), solver.H1_semi_error(Exact_u_derivative))
@@ -64,13 +56,6 @@ if __name__ == '__main__':
         number_of_elements = 2**(i+2)
         solver = Possion_1D_FE_solver_Neumann(a, b, coefficient_function, source_function, number_of_elements=number_of_elements, \
                                       basis_function_type_trial=Basis.QUADRATIC, basis_function_type_test=Basis.QUADRATIC, Gaussian_Integral_1D_N=Gaussian_Integral_1D_N)
-        x = np.linspace(a,b,2*number_of_elements+1)
-        # test_number = 100
-        # x = np.linspace(a,b,test_number+1)
-        # x = 0.65
-        # u_pred_quadratic = solver.solve()
-        # # u_pred_quadratic = solver.solve_x(x)
-        # u_true = Exact_u(x)        
 
         # 打印误差        
         log_str = 'n %5d L_infinity: %10.6e L2: %10.6e H1: %10.6e H1-semi: %10.6e' % (number_of_elements, solver.L_infinity_error(Exact_u), solver.L2_error(Exact_u), \
@@ -84,13 +69,6 @@ if __name__ == '__main__':
         number_of_elements = 2**(i+2)
         solver = Possion_1D_FE_solver_Robin(a, b, coefficient_function, source_function, number_of_elements=number_of_elements, \
                                       basis_function_type_trial=Basis.QUADRATIC, basis_function_type_test=Basis.QUADRATIC, Gaussian_Integral_1D_N=Gaussian_Integral_1D_N)
-        x = np.linspace(a,b, 3*number_of_elements+1)
-        # test_number = 100
-        # x = np.linspace(a,b,test_number+1)
-        # x = 0.65
-        # u_pred_quadratic = solver.solve()
-        # u_pred_quadratic = solver.solve_x(x)
-        # u_true = Exact_u(x)        
 
         # 打印误差  
         log_str = 'n %5d L_infinity: %10.6e L2: %10.6e H1: %10.6e H1-semi: %10.6e' % (number_of_elements, solver.L_infinity_error(Exact_u), solver.L2_error(Exact_u), \
