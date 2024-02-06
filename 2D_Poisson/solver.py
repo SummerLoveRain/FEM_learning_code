@@ -1,100 +1,184 @@
+import math
 import numpy as np
 import scipy
-from basis import basis_local_linear_1D, basis_local_quadratic_1D, Basis
+from basis import basis_triangular_reference_linear_2D, basis_triangular_reference_quadratic_2D, Basis
 from fem import *
 
-class Base_1D_Solver:
-    def __init__(self, a, b, number_of_elements, basis_function_type_trial, basis_function_type_test, Gaussian_Integral_1D_N=3):
-        self.a = a
-        self.b = b
-        self.number_of_elements = number_of_elements
-        self.basis_function_type_trial = basis_function_type_trial
-        self.basis_function_type_test = basis_function_type_test
-        self.Gaussian_Integral_1D_N = Gaussian_Integral_1D_N
+class Base_2D_Solver:
+    def __init__(self, bounds, Nx, Ny, basis_function_type, Gaussian_Integral_triangular_2D_N=10):
+        # the bounds of problems in a rectangular domain
+        self.bounds = bounds        
+        self.a = self.bounds[0]
+        self.b = self.bounds[1]
+        self.c = self.bounds[2]
+        self.d = self.bounds[3]
+        # the number of partition on each axis
+        self.Nx = Nx
+        self.Ny = Ny
+        # the number of elements
+        self.Nb = 2*Nx*Ny
+        # the number of mesh nodes
+        self.Nm = (Nx+1)*(Ny+1)
+        # the type of trial and test basis function
+        self.basis_function_type = basis_function_type
+        # the order used in Gaussian Integrals
+        self.Gaussian_Integral_triangular_2D_N = Gaussian_Integral_triangular_2D_N
 
-        if self.basis_function_type_trial == Basis.LINEAR:
-            self.basis_function_trial = basis_local_linear_1D
-        elif self.basis_function_type_test == Basis.QUADRATIC:
-            self.basis_function_trial = basis_local_quadratic_1D
+        if self.basis_function_type == Basis.LINEAR:
+            self.basis_function = basis_triangular_reference_linear_2D
+        elif self.basis_function_type == Basis.QUADRATIC:
+            self.basis_function = basis_triangular_reference_quadratic_2D
         else:
             ValueError("The basis_function_type_trial is not correct!")
-
-        if self.basis_function_type_test == Basis.LINEAR:
-            self.basis_function_test = basis_local_linear_1D
-        elif self.basis_function_type_test == Basis.QUADRATIC:
-            self.basis_function_test = basis_local_quadratic_1D
-        else:
-            ValueError("The basis_function_type_test is not correct!")
     
     def generate_P_T(self):
+        # P is an information matrix consisting of the coordinates of all mesh nodes
+        # T is an information matrix consisting of the global node indices of the mesh nodes of all the mesh elements
         P, T = self.generate_Pb_Tb_linear()
         return P, T
     
-    def generate_Pb_Tb_linear(self):
-        a = self.a
-        b = self.b
-        number_of_elements = self.number_of_elements
+    def repeat_tile(self, x, y):
+        return np.transpose([np.repeat(x, len(y)),
+                            np.tile(y, len(x))])
 
-        Pb = np.linspace(a, b, number_of_elements+1)
-        Tb = np.zeros((number_of_elements, 2), dtype=int)
-        Tb[:, 0] = np.arange(number_of_elements)
-        Tb[:, 1] = Tb[:, 0] + 1
+    def generate_Pb_Tb_linear(self):
+        # [P, T] is the same as [Pb, Tb] in the linear case
+        coord_x = np.linspace(self.a, self.b, self.Nx+1)
+        coord_y = np.linspace(self.c, self.d, self.Ny+1)
+        Pb = self.repeat_tile(coord_x, coord_y)
+        Tb = np.zeros((self.Nb, 3), dtype=int)
+        for i in range(self.Nb):
+            # the index of elements
+            n = i + 1
+            # the column index
+            times = n//(2*self.Ny)
+            remainder = n%(2*self.Ny)
+            if remainder > 0:
+                c = times + 1
+            else:
+                c = times
+            # the row index
+            r = (n - 2*self.Ny*(c-1) + 1)//2
+            first_number = (c-1)*(self.Ny+1) + r - 1
+            # odd number, even number
+            if n%2 == 1:
+                second_number = first_number + self.Ny + 1
+                Tb[i, 0] = first_number
+                Tb[i, 1] = second_number
+                Tb[i, 2] = first_number + 1
+            else:
+                first_number += 1
+                second_number = first_number + self.Ny
+                Tb[i, 0] = first_number
+                Tb[i, 1] = second_number
+                Tb[i, 2] = second_number + 1
         return Pb, Tb
     
     def generate_Pb_Tb_quadratic(self):
-        a = self.a
-        b = self.b
-        number_of_elements = self.number_of_elements
-
-        Pb = np.linspace(a, b, 2*number_of_elements+1)
-        Tb = np.zeros((number_of_elements, 3), dtype=int)
-        Tb[:, 0] = np.arange(2*number_of_elements, step=2)
-        Tb[:, 1] = Tb[:, 0] + 2
-        Tb[:, 2] = Tb[:, 0] + 1
+        # Pb is an information matrix consisting of the coordinates of all finite element nodes.
+        # Tb is an information matrix consisting of the global node indices of the finite element nodes of all the mesh elements.
+        coord_x = np.linspace(self.a, self.b, 2*self.Nx+1)
+        coord_y = np.linspace(self.c, self.d, 2*self.Ny+1)
+        Pb = self.repeat_tile(coord_x, coord_y)
+        Tb = np.zeros((self.Nb, 6), dtype=int)
+        for i in range(self.Nb):
+            # the index of elements
+            n = i + 1
+            # the column index
+            times = n//(2*self.Ny)
+            remainder = n%(2*self.Ny)
+            if remainder > 0:
+                c = times + 1
+            else:
+                c = times
+            # the row index
+            r = (n - 2*self.Ny*(c-1) + 1)//2
+            first_number = (c-1)*(2*(2*self.Ny+1)) + (2*r-1) - 1
+            # odd number, even number
+            if n%2 == 1:
+                second_number = first_number + 2*(2*self.Ny+1)
+                fourth_number = first_number + (2*self.Ny + 1)
+                Tb[i, 0] = first_number
+                Tb[i, 1] = second_number
+                Tb[i, 2] = first_number + 2
+                Tb[i, 3] = fourth_number
+                Tb[i, 4] = fourth_number + 1
+                Tb[i, 5] = fourth_number - 2*self.Ny
+            else:
+                first_number += 2
+                fourth_number = first_number + 2*self.Ny
+                fifth_number = fourth_number + 2*self.Ny + 1
+                Tb[i, 0] = first_number
+                Tb[i, 1] = fifth_number - 1
+                Tb[i, 2] = fifth_number + 1
+                Tb[i, 3] = fourth_number
+                Tb[i, 4] = fifth_number
+                Tb[i, 5] = fourth_number + 1
         return Pb, Tb
     
-    def generate_Pb_Tb_trial(self):
-        if self.basis_function_type_trial == Basis.LINEAR:
+    def generate_Pb_Tb(self):
+        if self.basis_function_type == Basis.LINEAR:
             Pb, Tb = self.generate_Pb_Tb_linear()
-        elif self.basis_function_type_trial == Basis.QUADRATIC:
+        elif self.basis_function_type == Basis.QUADRATIC:
             Pb, Tb = self.generate_Pb_Tb_quadratic()
         return Pb, Tb
     
-    def generate_Pb_Tb_test(self):
-        if self.basis_function_type_test == Basis.LINEAR:
-            Pb, Tb = self.generate_Pb_Tb_linear()
-        elif self.basis_function_type_test == Basis.QUADRATIC:
-            Pb, Tb = self.generate_Pb_Tb_quadratic()
-        return Pb, Tb
+    def is_in_triangle(self, x, y, vertices):
+        x1 = vertices[0, 0]
+        y1 = vertices[0, 1]
+        x2 = vertices[1, 0]
+        y2 = vertices[1, 1]
+        x3 = vertices[2, 0]
+        y3 = vertices[2, 1]
+        
+        def getSideLength(x1, y1, x2, y2):
+            a = np.abs(x2 - x1)
+            b = np.abs(y2 - y1)
+            return np.sqrt(a*a + b*b)
     
-    def solve_x(self, x):
+        def getArea(x1, y1, x2, y2, x3, y3):
+            a = getSideLength(x1, y1, x2, y2)
+            b = getSideLength(x1, y1, x3, y3)
+            c = getSideLength(x2, y2, x3, y3)
+            p = (a + b + c) / 2
+            area_square = p * (p-a) * (p-b) * (p-c)
+            if area_square < 1e-15:
+                return 0
+            else:
+                return np.sqrt(area_square)
+    
+        area1 = getArea(x1, y1, x2, y2, x, y)
+        # print(area1)
+        area2 = getArea(x1, y1, x3, y3, x, y)
+        # print(area2)
+        area3 = getArea(x2, y2, x3, y3, x, y)
+        # print(area3)
+        allArea = getArea(x1, y1, x2, y2, x3, y3)
+        # print(allArea)
+        return (area1 + area2 + area3) <= allArea
+ 
+    
+    def solve_xy(self, x, y):
         if self.uh is None:
             self.uh = self.solve()
         P, T = self.generate_P_T()
-        Pb_trial, Tb_trial = self.generate_Pb_Tb_trial()
-        # N_trial:  the total number of the trial functions in the local space
-        N_local_trial = Tb_trial.shape[1]
-        derivative_order_trial = 0
+        Pb, Tb = self.generate_Pb_Tb()
 
-        number_of_elements = T.shape[0]
-        def func(x):
+        Nb = T.shape[0]
+        Nl = Tb.shape[1]
+
+        def func(x, y):
             value = 0.0
-            for i in range(number_of_elements):
-                # lower bound
-                x_i = P[T[i, 0]]
-                # upper bound
-                x_ip = P[T[i, 1]]
-                if x>x_i and x<x_ip:
-                    for alpha in range(N_local_trial):
-                        f_func = lambda x : self.uh[Tb_trial[i, alpha]]*self.basis_function_trial(affine_x(x_i, x_ip, x, derivative_order=0), alpha, derivative_order_trial)
-                        value += f_func(x)
-                elif x==x_i:
-                    value = self.uh[Tb_trial[i, 0]]
-                elif x==x_ip:
-                    value = self.uh[Tb_trial[i, 1]]
+            for i in range(Nb):
+                vertices = np.array([[P[T[i, 0], 0], P[T[i, 0], 1]], [P[T[i, 1], 0], P[T[i, 1], 1]], [P[T[i, 2], 0], P[T[i, 2], 1]]])
+                new_x, new_y = affine_triangular_xy(x, y, vertices, derivative_order_x=0, derivative_order_y=0)
+                if self.is_in_triangle(x, y, vertices):
+                    for j in range(Nl):
+                        value += self.uh[Tb[i, j]]*self.basis_function(new_x, new_y, j, derivative_order_x=0, derivative_order_y=0)
+                    break
             return value
-        func_x =  np.frompyfunc(func, 1, 1)
-        value = func_x(x)
+        func_xy =  np.frompyfunc(func, 2, 1)
+        value = func_xy(x, y)                  
         return value
     
     def solve(self):
@@ -103,16 +187,18 @@ class Base_1D_Solver:
         '''
         print("solve for uh!")
 
-    def L_infinity_error(self, u_func, x=None):
+    def L_infinity_error(self, u_func, x=None, y=None):
         '''
         u_func: The function of exact solution
         compute the L-infinity error
-        if x is None, compute the L-infinity error on all elements
         '''
-        if x is None:
-            x, _ = self.generate_Pb_Tb_trial()
-        u = u_func(x)
-        uh = self.solve_x(x)
+        if x is None or y is None:
+            Pb, _ = self.generate_Pb_Tb()
+            x = Pb[:, 0]
+            y = Pb[:, 1]
+        u = u_func(x, y, derivative_order_x=0, derivative_order_y=0)
+        uh = self.solve_xy(x, y)
+        # uh = self.solve()
         error = np.max(np.abs(u-uh))
         return error
         
@@ -124,302 +210,544 @@ class Base_1D_Solver:
         if self.uh is None:
             self.uh = self.solve()
         P, T = self.generate_P_T()
-        Pb_trial, Tb_trial = self.generate_Pb_Tb_trial()
+        Pb, Tb = self.generate_Pb_Tb()
         # N_trial:  the total number of the trial functions in the local space
-        N_local_trial = Tb_trial.shape[1]
+        Nl = Tb.shape[1]
 
-        number_of_elements = T.shape[0]
+        Nb = T.shape[0]
         error = 0.0
 
-        for i in range(number_of_elements):
-            # lower bound
-            x_i = P[T[i, 0]]
-            # upper bound
-            x_ip = P[T[i, 1]]
-            def uh_func(x):
+        for i in range(Nb):
+            vertices = np.array([[P[T[i, 0], 0], P[T[i, 0], 1]], [P[T[i, 1], 0], P[T[i, 1], 1]], [P[T[i, 2], 0], P[T[i, 2], 1]]])
+            def uh_func(x, y):
                 uh = 0.0
-                for alpha in range(N_local_trial):
-                    uh += self.uh[Tb_trial[i, alpha]]*self.basis_function_trial(affine_x(x_i, x_ip, x, derivative_order=0), alpha, derivative_order=0)
+                new_x, new_y = affine_triangular_xy(x, y, vertices, derivative_order_x=0, derivative_order_y=0)
+                for j in range(Nl):
+                    uh += self.uh[Tb[i, j]]*self.basis_function(new_x, new_y, j, derivative_order_x=0, derivative_order_y=0)
                 return uh
-            f_integral = lambda x : (u_func(x) - uh_func(x))**2
+            f_integral = lambda x ,y: (u_func(x, y, derivative_order_x=0, derivative_order_y=0) - uh_func(x, y))**2
             # Gaussian Integral
-            integral = Gaussian_Integral_1D(x_i, x_ip, f_integral, self.Gaussian_Integral_1D_N)
+            integral = Gaussian_Integral_triangular_2D(vertices, f_integral, self.Gaussian_Integral_triangular_2D_N)
             error += integral
         error = np.sqrt(error)
         return error
     
-    def H1_error(self, u_func, u_derivative_func):
+    def H1_error(self, u_func):
         '''
         u_func: The function of exact solution
-        u_derivative_func: The derivative function of exact solution
         '''
         if self.uh is None:
             self.uh = self.solve()
         P, T = self.generate_P_T()
-        Pb_trial, Tb_trial = self.generate_Pb_Tb_trial()
+        Pb, Tb = self.generate_Pb_Tb()
         # N_trial:  the total number of the trial functions in the local space
-        N_local_trial = Tb_trial.shape[1]
+        Nl = Tb.shape[1]
 
-        number_of_elements = T.shape[0]
+        Nb = T.shape[0]
         error = 0.0
-        for i in range(number_of_elements):
-            # lower bound
-            x_i = P[T[i, 0]]
-            # upper bound
-            x_ip = P[T[i, 1]]            
-            def uh_func(x):
+        for i in range(Nb):
+            vertices = np.array([[P[T[i, 0], 0], P[T[i, 0], 1]], [P[T[i, 1], 0], P[T[i, 1], 1]], [P[T[i, 2], 0], P[T[i, 2], 1]]])
+            def uh_func(x, y):
                 uh = 0.0
-                for alpha in range(N_local_trial):
-                    uh += self.uh[Tb_trial[i, alpha]]*self.basis_function_trial(affine_x(x_i, x_ip, x, derivative_order=0), alpha, derivative_order=0)
+                new_x, new_y = affine_triangular_xy(x, y, vertices, derivative_order_x=0, derivative_order_y=0)
+                for j in range(Nl):
+                    uh += self.uh[Tb[i, j]]*self.basis_function(new_x, new_y, j, derivative_order_x=0, derivative_order_y=0)
                 return uh
-            def uh_derivative_func(x):
+            def uh_x_func(x, y):
                 uh = 0.0
-                for alpha in range(N_local_trial):
-                    uh += self.uh[Tb_trial[i, alpha]]*self.basis_function_trial(affine_x(x_i, x_ip, x, derivative_order=0), alpha, derivative_order=1)*\
-                        affine_x(x_i, x_ip, x, derivative_order=1)
-                return uh            
-            f_integral = lambda x : (u_func(x) - uh_func(x))**2 + (u_derivative_func(x) - uh_derivative_func(x))**2
+                new_x, new_y = affine_triangular_xy(x, y, vertices, derivative_order_x=0, derivative_order_y=0)
+                [xhat_x, yhat_x] = affine_triangular_xy(x, y, vertices, derivative_order_x=1, derivative_order_y=0)
+                for j in range(Nl):
+                    ux = self.basis_function(new_x, new_y, j, derivative_order_x=1, derivative_order_y=0)
+                    uy = self.basis_function(new_x, new_y, j, derivative_order_x=0, derivative_order_y=1)
+                    uh += self.uh[Tb[i, j]]*(ux*xhat_x + uy*yhat_x)
+                return uh
+            def uh_y_func(x, y):
+                uh = 0.0
+                new_x, new_y = affine_triangular_xy(x, y, vertices, derivative_order_x=0, derivative_order_y=0)
+                [xhat_y, yhat_y] = affine_triangular_xy(x, y, vertices, derivative_order_x=0, derivative_order_y=1)
+                for j in range(Nl):
+                    ux = self.basis_function(new_x, new_y, j, derivative_order_x=1, derivative_order_y=0)
+                    uy = self.basis_function(new_x, new_y, j, derivative_order_x=0, derivative_order_y=1)
+                    uh += self.uh[Tb[i, j]]*(ux*xhat_y + uy*yhat_y)
+                return uh
+            f_integral = lambda x, y : (u_func(x, y, derivative_order_x=0, derivative_order_y=0) - uh_func(x, y))**2 +\
+                  (u_func(x, y, derivative_order_x=1, derivative_order_y=0) - uh_x_func(x, y))**2 +\
+                  (u_func(x, y, derivative_order_x=0, derivative_order_y=1) - uh_y_func(x, y))**2
             # Gaussian Integral
-            integral = Gaussian_Integral_1D(x_i, x_ip, f_integral, self.Gaussian_Integral_1D_N)
+            integral = Gaussian_Integral_triangular_2D(vertices, f_integral, self.Gaussian_Integral_triangular_2D_N)
             error += integral
         error = np.sqrt(error)
         return error
     
     
-    def H1_semi_error(self, u_derivative_func):
+    def H1_semi_error(self, u_func):
         '''
-        u_derivative_func: The derivative function of exact solution
+        u_func: The function of exact solution
         '''
         if self.uh is None:
             self.uh = self.solve()
         P, T = self.generate_P_T()
-        Pb_trial, Tb_trial = self.generate_Pb_Tb_trial()
+        Pb, Tb = self.generate_Pb_Tb()
         # N_trial:  the total number of the trial functions in the local space
-        N_local_trial = Tb_trial.shape[1]
+        Nl = Tb.shape[1]
 
-        number_of_elements = T.shape[0]
+        Nb = T.shape[0]
         error = 0.0
-        for i in range(number_of_elements):
-            # lower bound
-            x_i = P[T[i, 0]]
-            # upper bound
-            x_ip = P[T[i, 1]]
-            def uh_derivative_func(x):
+        for i in range(Nb):
+            vertices = np.array([[P[T[i, 0], 0], P[T[i, 0], 1]], [P[T[i, 1], 0], P[T[i, 1], 1]], [P[T[i, 2], 0], P[T[i, 2], 1]]])
+            def uh_x_func(x, y):
                 uh = 0.0
-                for alpha in range(N_local_trial):
-                    uh += self.uh[Tb_trial[i, alpha]]*self.basis_function_trial(affine_x(x_i, x_ip, x, derivative_order=0), alpha, derivative_order=1)*\
-                        affine_x(x_i, x_ip, x, derivative_order=1)
-                return uh            
-            f_integral = lambda x : (u_derivative_func(x) - uh_derivative_func(x))**2
+                new_x, new_y = affine_triangular_xy(x, y, vertices, derivative_order_x=0, derivative_order_y=0)
+                [xhat_x, yhat_x] = affine_triangular_xy(x, y, vertices, derivative_order_x=1, derivative_order_y=0)
+                for j in range(Nl):
+                    ux = self.basis_function(new_x, new_y, j, derivative_order_x=1, derivative_order_y=0)
+                    uy = self.basis_function(new_x, new_y, j, derivative_order_x=0, derivative_order_y=1)
+                    uh += self.uh[Tb[i, j]]*(ux*xhat_x + uy*yhat_x)
+                return uh
+            def uh_y_func(x, y):
+                uh = 0.0
+                new_x, new_y = affine_triangular_xy(x, y, vertices, derivative_order_x=0, derivative_order_y=0)
+                [xhat_y, yhat_y] = affine_triangular_xy(x, y, vertices, derivative_order_x=0, derivative_order_y=1)
+                for j in range(Nl):
+                    ux = self.basis_function(new_x, new_y, j, derivative_order_x=1, derivative_order_y=0)
+                    uy = self.basis_function(new_x, new_y, j, derivative_order_x=0, derivative_order_y=1)
+                    uh += self.uh[Tb[i, j]]*(ux*xhat_y + uy*yhat_y)
+                return uh
+            f_integral = lambda x, y : (u_func(x, y, derivative_order_x=1, derivative_order_y=0) - uh_x_func(x, y))**2 +\
+                  (u_func(x, y, derivative_order_x=0, derivative_order_y=1) - uh_y_func(x, y))**2
             # Gaussian Integral
-            integral = Gaussian_Integral_1D(x_i, x_ip, f_integral, self.Gaussian_Integral_1D_N)
+            integral = Gaussian_Integral_triangular_2D(vertices, f_integral, self.Gaussian_Integral_triangular_2D_N)
             error += integral
         error = np.sqrt(error)
         return error
 
-class Possion_1D_FE_solver_Dirichlet(Base_1D_Solver):
-    def __init__(self, a, b, coefficient_function, source_function, number_of_elements, basis_function_type_trial, basis_function_type_test, Gaussian_Integral_1D_N=3):
+
+
+class Possion_2D_FE_solver_Dirichlet(Base_2D_Solver):
+    def __init__(self, bounds, Nx, Ny, basis_function_type, coefficient_function, source_function, Gaussian_Integral_triangular_2D_N=10):
         '''
-        a : lower bound
-        b : upper bound
+        bounds: the bounds of problems in a rectangular domain
+        Nx, Ny: the number of partition on each axis
+        the order used in Gaussian Integrals
         basis_function_type: linear, quadratic
         '''
-        super(Possion_1D_FE_solver_Dirichlet, self).__init__(a, b, number_of_elements, basis_function_type_trial, basis_function_type_test, Gaussian_Integral_1D_N)
+        super(Possion_2D_FE_solver_Dirichlet, self).__init__(bounds, Nx, Ny, basis_function_type, Gaussian_Integral_triangular_2D_N)
         self.coefficient_function = coefficient_function
         self.source_function = source_function
         
         self.uh = None
     
-    
-    def dirichlet_boundary(self, x):
-        a = self.a
-        b = self.b
-        if np.abs(x-a)<1e-15:
-            result = 0.0
-        elif np.abs(x-b)<1e-15:
-            result = np.cos(b)
+    def dirichlet_boundary(self, x, y):
+        if np.abs(x-self.a)<1e-15:
+            u = -1.5*y*(1-y)*np.exp(-1+y)
+        elif np.abs(x-self.b)<1e-15:
+            u = 0.5*y*(1-y)*np.exp(1+y)
+        elif np.abs(y-self.c)<1e-15:
+            u = -2*x*(1-x/2)*np.exp(x-1)
+        elif np.abs(y-self.d)<1e-15:
+            u = 0
         else:
-            ValueError('No boundary points!')
-        return result
+            ValueError('No boundary edges!')
+        return u
     
-    def generate_boundary_nodes(self):
-        #boundarynodes[i,0] 表示第i个边界点的边界类型:
-        #0-- dirichlet, 1--neumann, 2--robin
-        #boundarynodes[i,1] 表示第i个边界点的全局坐标
-        boundarynodes = np.zeros((2,2),dtype=int)
+    def generate_boundary_edges(self):
+        #boundary_edges[i,0] is the type of the k-th boundary edge ek:
+        # Dirichlet, Neumann, Robin
+        #boundary_edges[i,1] is the index of the element which contains the k-th boundary edge ek
+        # Each boundary edge has two end nodes. We index them as the first and the second counterclock wise along the boundary.
+        # boundary_edges[i, 2] is the global node index of the first end node of the k-th boundary edge ek.
+        # boundary_edges[i, 3] is the global node index of the second end node of the k-th boundary edge ek.
+        if self.basis_function_type == Basis.LINEAR:
+            boundary_edges = self.generate_boundary_linear()
+        elif self.basis_function_type == Basis.QUADRATIC:
+            boundary_edges = self.generate_boundary_quadratic()
+        return boundary_edges
 
-        boundarynodes[0,0] = Boundary.DIRICHLET_BOUNDARY
-        boundarynodes[0,1] = 0
-
-        boundarynodes[1,0] = Boundary.DIRICHLET_BOUNDARY
-
-        number_of_elements = self.number_of_elements
-        if self.basis_function_type_trial == Basis.LINEAR:
-            boundarynodes[1,1] = number_of_elements
-        elif self.basis_function_type_trial == Basis.QUADRATIC:
-            boundarynodes[1,1] = 2*number_of_elements
-        return boundarynodes
+    def generate_boundary_linear(self):
+        boundary_edges = np.zeros((2*(self.Nx+self.Ny), 4),dtype=int)
+        _, Tb = self.generate_Pb_Tb()
+        # boundary edge on the x-axis
+        for i in range(2*(self.Nx+self.Ny)):
+            if i<self.Nx:
+                # number of the element
+                n = i*(2*self.Ny) + 1
+                n = n-1
+                boundary_edges[i, 0] = Boundary.DIRICHLET_BOUNDARY
+                boundary_edges[i, 1] = n
+                boundary_edges[i, 2] = Tb[n, 0]
+                boundary_edges[i, 3] = Tb[n, 1]
+            elif i>=self.Nx and i<self.Nx+self.Ny:
+                # number of the element
+                n = (self.Nx-1)*(2*self.Ny) + 2*(i-self.Nx + 1)
+                n = n-1
+                boundary_edges[i, 0] = Boundary.DIRICHLET_BOUNDARY
+                boundary_edges[i, 1] = n
+                boundary_edges[i, 2] = Tb[n, 1]
+                boundary_edges[i, 3] = Tb[n, 2]
+            elif i>=self.Nx+self.Ny and i<2*self.Nx+self.Ny:
+                # number of the element
+                n = (self.Nx-(i-self.Nx-self.Ny))*2*self.Ny
+                n = n-1
+                boundary_edges[i, 0] = Boundary.DIRICHLET_BOUNDARY
+                boundary_edges[i, 1] = n
+                boundary_edges[i, 2] = Tb[n, 2]
+                boundary_edges[i, 3] = Tb[n, 0]
+            elif i>=2*self.Nx+self.Ny and i<2*self.Nx+2*self.Ny:
+                # number of the element
+                n = 2*(self.Ny-(i-self.Nx-self.Nx-self.Ny))-1
+                n = n-1
+                boundary_edges[i, 0] = Boundary.DIRICHLET_BOUNDARY
+                boundary_edges[i, 1] = n
+                boundary_edges[i, 2] = Tb[n, 2]
+                boundary_edges[i, 3] = Tb[n, 0]
+        return boundary_edges
+    
+    
+    def generate_boundary_quadratic(self):
+        boundary_edges = np.zeros((2*(self.Nx+self.Ny), 5),dtype=int)
+        _, Tb = self.generate_Pb_Tb()
+        # boundary edge on the x-axis
+        for i in range(2*(self.Nx+self.Ny)):
+            if i<self.Nx:
+                # number of the element
+                n = i*(2*self.Ny) + 1
+                n = n-1
+                boundary_edges[i, 0] = Boundary.DIRICHLET_BOUNDARY
+                boundary_edges[i, 1] = n
+                boundary_edges[i, 2] = Tb[n, 0]
+                boundary_edges[i, 3] = Tb[n, 1]
+                boundary_edges[i, 4] = Tb[n, 3]
+            elif i>=self.Nx and i<self.Nx+self.Ny:
+                # number of the element
+                n = (self.Nx-1)*(2*self.Ny) + 2*(i-self.Nx + 1)
+                n = n-1
+                boundary_edges[i, 0] = Boundary.DIRICHLET_BOUNDARY
+                boundary_edges[i, 1] = n
+                boundary_edges[i, 2] = Tb[n, 1]
+                boundary_edges[i, 3] = Tb[n, 2]
+                boundary_edges[i, 4] = Tb[n, 4]
+            elif i>=self.Nx+self.Ny and i<2*self.Nx+self.Ny:
+                # number of the element
+                n = (self.Nx-(i-self.Nx-self.Ny))*2*self.Ny
+                n = n-1
+                boundary_edges[i, 0] = Boundary.DIRICHLET_BOUNDARY
+                boundary_edges[i, 1] = n
+                boundary_edges[i, 2] = Tb[n, 2]
+                boundary_edges[i, 3] = Tb[n, 0]
+                boundary_edges[i, 4] = Tb[n, 3]
+            elif i>=2*self.Nx+self.Ny and i<2*self.Nx+2*self.Ny:
+                # number of the element
+                n = 2*(self.Ny-(i-self.Nx-self.Nx-self.Ny))-1
+                n = n-1
+                boundary_edges[i, 0] = Boundary.DIRICHLET_BOUNDARY
+                boundary_edges[i, 1] = n
+                boundary_edges[i, 2] = Tb[n, 2]
+                boundary_edges[i, 3] = Tb[n, 0]
+                boundary_edges[i, 4] = Tb[n, 5]
+        return boundary_edges
     
     def solve(self):
         P, T = self.generate_P_T()
-        Pb_trial, Tb_trial = self.generate_Pb_Tb_trial()
-        Pb_test, Tb_test = self.generate_Pb_Tb_test()
-        boundary_nodes = self.generate_boundary_nodes()
-        derivative_order_trial = 1
-        derivative_order_test = 1
-        A = assemble_matrix_A_1D(P, T, Tb_trial, Tb_test, self.coefficient_function, self.basis_function_trial, self.basis_function_test, \
-                        derivative_order_trial, derivative_order_test, Gaussian_Integral_1D_N=self.Gaussian_Integral_1D_N)
-        b = assemble_vector_b_1D(P, T, Tb_test, self.source_function, self.basis_function_test, Gaussian_Integral_1D_N=self.Gaussian_Integral_1D_N)
-        A, b = treat_Dirichlet_boundary_1D(Pb_trial, A, b, boundary_nodes, self.dirichlet_boundary)
+        Pb, Tb = self.generate_Pb_Tb()
+        boundary_edges = self.generate_boundary_edges()
+        A = assemble_matrix_A_2D(P, T, Pb, Tb, self.coefficient_function, self.basis_function, \
+                        Gaussian_Integral_triangular_2D_N=self.Gaussian_Integral_triangular_2D_N)
+        b = assemble_vector_b_2D(P, T, Tb, self.source_function, self.basis_function, Gaussian_Integral_triangular_2D_N=self.Gaussian_Integral_triangular_2D_N)
+        A, b = treat_Dirichlet_boundary_2D(Pb, Tb, A, b, boundary_edges, self.dirichlet_boundary)
         uh = scipy.sparse.linalg.spsolve(A.tocsc(), b.tocsc())
         # uh = scipy.sparse.linalg.lsqr(A.tocsc(), b.tocsc())
         return uh
 
 
-
-class Possion_1D_FE_solver_Neumann(Base_1D_Solver):
-    def __init__(self, a, b, coefficient_function, source_function, number_of_elements, basis_function_type_trial, basis_function_type_test, Gaussian_Integral_1D_N=3):
+class Possion_2D_FE_solver_Neumann(Base_2D_Solver):
+    def __init__(self, bounds, Nx, Ny, basis_function_type, coefficient_function, source_function, Gaussian_Integral_triangular_2D_N=10):
         '''
-        a : lower bound
-        b : upper bound
+        bounds: the bounds of problems in a rectangular domain
+        Nx, Ny: the number of partition on each axis
+        the order used in Gaussian Integrals
         basis_function_type: linear, quadratic
         '''
-        super(Possion_1D_FE_solver_Neumann, self).__init__(a, b, number_of_elements, basis_function_type_trial, basis_function_type_test, Gaussian_Integral_1D_N)
-        self.coefficient_function = coefficient_function
-        self.source_function = source_function
-
-        self.uh = None
-    
-    def dirichlet_boundary(self, x):
-        a = self.a
-        b = self.b
-        if np.abs(x-a)<1e-15:
-            result = 0.0
-        # elif np.abs(x-b)<1e-15:
-        #     result = np.cos(b)
-        else:
-            ValueError('No boundary points!')
-        return result
-    
-    def neumann_boundary(self, x):
-        b = self.b
-        if np.abs(x-b)<1e-15:
-            result = np.cos(x) - np.sin(x)
-        else:
-            ValueError('No boundary points!')
-        return result
-    
-    def generate_boundary_nodes(self):
-        #boundarynodes[i,0] 表示第i个边界点的边界类型:
-        #0-- dirichlet, 1--neumann, 2--robin
-        #boundarynodes[i,1] 表示第i个边界点的全局坐标
-        boundarynodes = np.zeros((2,3),dtype=int)
-
-        boundarynodes[0,0] = Boundary.DIRICHLET_BOUNDARY
-        boundarynodes[0,1] = 0
-        # normal direction
-        boundarynodes[0,2] = 0
-
-        boundarynodes[1,0] = Boundary.NEUMANN_BOUNDARY
-        # normal direction
-        boundarynodes[1,2] = 1
-
-        number_of_elements = self.number_of_elements
-        if self.basis_function_type_trial == Basis.LINEAR:
-            boundarynodes[1,1] = number_of_elements
-        if self.basis_function_type_trial == Basis.QUADRATIC:
-            boundarynodes[1,1] = 2*number_of_elements
-        return boundarynodes
-    
-    def solve(self):
-        P, T = self.generate_P_T()
-        Pb_trial, Tb_trial = self.generate_Pb_Tb_trial()
-        Pb_test, Tb_test = self.generate_Pb_Tb_test()
-        boundary_nodes = self.generate_boundary_nodes()
-        derivative_order_trial = 1
-        derivative_order_test = 1
-        A = assemble_matrix_A_1D(P, T, Tb_trial, Tb_test, self.coefficient_function, self.basis_function_trial, self.basis_function_test, \
-                        derivative_order_trial, derivative_order_test, Gaussian_Integral_1D_N=self.Gaussian_Integral_1D_N)
-        b = assemble_vector_b_1D(P, T, Tb_test, self.source_function, self.basis_function_test, Gaussian_Integral_1D_N=self.Gaussian_Integral_1D_N)
-        A, b = treat_Dirichlet_boundary_1D(Pb_trial, A, b, boundary_nodes, self.dirichlet_boundary)
-        A, b = treat_Neumann_boundary_1D(Pb_trial, Tb_test, A, b, boundary_nodes, self.coefficient_function, self.neumann_boundary, self.basis_function_test)
-        uh = scipy.sparse.linalg.spsolve(A.tocsc(), b.tocsc())
-        # uh = scipy.sparse.linalg.lsqr(A.tocsc(), b.tocsc())
-        return uh
-
-
-
-class Possion_1D_FE_solver_Robin(Base_1D_Solver):
-    def __init__(self, a, b, coefficient_function, source_function, number_of_elements, basis_function_type_trial, basis_function_type_test, Gaussian_Integral_1D_N=3):
-        '''
-        a : lower bound
-        b : upper bound
-        basis_function_type: linear, quadratic
-        '''
-        super(Possion_1D_FE_solver_Robin, self).__init__(a, b, number_of_elements, basis_function_type_trial, basis_function_type_test, Gaussian_Integral_1D_N)
+        super(Possion_2D_FE_solver_Neumann, self).__init__(bounds, Nx, Ny, basis_function_type, Gaussian_Integral_triangular_2D_N)
         self.coefficient_function = coefficient_function
         self.source_function = source_function
         
         self.uh = None
     
-    def dirichlet_boundary(self, x):
-        b = self.b
-        if np.abs(x-b)<1e-15:
-            result = np.cos(x)
+    def dirichlet_boundary(self, x, y):
+        if np.abs(x-self.a)<1e-15:
+            u = np.exp(-1+y)
+        elif np.abs(x-self.b)<1e-15:
+            u = np.exp(1+y)
+        elif np.abs(y-self.d)<1e-15:
+            u = np.exp(x+1)
         else:
-            ValueError('No boundary points!')
-        return result
+            ValueError('No boundary edges!')
+        return u
     
-    def robin_boundary_p(self, x):
-        a = self.a
-        if np.abs(x-a)<1e-15:
-            result = 1.0
+    def neumann_boundary(self, x, y):        
+        if np.abs(y-self.c)<1e-15:
+            u = -np.exp(x-1)
         else:
-            ValueError('No boundary points!')
-        return result
+            ValueError('No boundary edges!')
+        return u
     
-    def robin_boundary_q(self, x):
-        a = self.a
-        if np.abs(x-a)<1e-15:
-            result = 1.0
-        else:
-            ValueError('No boundary points!')
-        return result
+    def generate_boundary_edges(self):
+        #boundary_edges[i,0] is the type of the k-th boundary edge ek:
+        # Dirichlet, Neumann, Robin
+        #boundary_edges[i,1] is the index of the element which contains the k-th boundary edge ek
+        # Each boundary edge has two end nodes. We index them as the first and the second counterclock wise along the boundary.
+        # boundary_edges[i, 2] is the global node index of the first end node of the k-th boundary edge ek.
+        # boundary_edges[i, 3] is the global node index of the second end node of the k-th boundary edge ek.
+        if self.basis_function_type == Basis.LINEAR:
+            boundary_edges = self.generate_boundary_linear()
+        elif self.basis_function_type == Basis.QUADRATIC:
+            boundary_edges = self.generate_boundary_quadratic()
+        return boundary_edges
+
+    def generate_boundary_linear(self):
+        boundary_edges = np.zeros((2*(self.Nx+self.Ny), 4),dtype=int)
+        _, Tb = self.generate_Pb_Tb()
+        # boundary edge on the x-axis
+        for i in range(2*(self.Nx+self.Ny)):
+            if i<self.Nx:
+                # number of the element
+                n = i*(2*self.Ny) + 1
+                n = n-1
+                boundary_edges[i, 0] = Boundary.NEUMANN_BOUNDARY
+                boundary_edges[i, 1] = n
+                boundary_edges[i, 2] = Tb[n, 0]
+                boundary_edges[i, 3] = Tb[n, 1]
+            elif i>=self.Nx and i<self.Nx+self.Ny:
+                # number of the element
+                n = (self.Nx-1)*(2*self.Ny) + 2*(i-self.Nx + 1)
+                n = n-1
+                boundary_edges[i, 0] = Boundary.DIRICHLET_BOUNDARY
+                boundary_edges[i, 1] = n
+                boundary_edges[i, 2] = Tb[n, 1]
+                boundary_edges[i, 3] = Tb[n, 2]
+            elif i>=self.Nx+self.Ny and i<2*self.Nx+self.Ny:
+                # number of the element
+                n = (self.Nx-(i-self.Nx-self.Ny))*2*self.Ny
+                n = n-1
+                boundary_edges[i, 0] = Boundary.DIRICHLET_BOUNDARY
+                boundary_edges[i, 1] = n
+                boundary_edges[i, 2] = Tb[n, 2]
+                boundary_edges[i, 3] = Tb[n, 0]
+            elif i>=2*self.Nx+self.Ny and i<2*self.Nx+2*self.Ny:
+                # number of the element
+                n = 2*(self.Ny-(i-self.Nx-self.Nx-self.Ny))-1
+                n = n-1
+                boundary_edges[i, 0] = Boundary.DIRICHLET_BOUNDARY
+                boundary_edges[i, 1] = n
+                boundary_edges[i, 2] = Tb[n, 2]
+                boundary_edges[i, 3] = Tb[n, 0]
+        return boundary_edges
     
-    def generate_boundary_nodes(self):
-        #boundarynodes[i,0] 表示第i个边界点的边界类型:
-        #0-- dirichlet, 1--neumann, 2--robin
-        #boundarynodes[i,1] 表示第i个边界点的全局坐标
-        boundarynodes = np.zeros((2,3),dtype=int)
-
-        boundarynodes[0,0] = Boundary.ROBIN_BOUNDARY
-        boundarynodes[0,1] = 0
-        # normal direction
-        boundarynodes[0,2] = -1
-
-        boundarynodes[1,0] = Boundary.DIRICHLET_BOUNDARY
-        boundarynodes[1,2] = 0
-
-        number_of_elements = self.number_of_elements
-        if self.basis_function_type_trial == Basis.LINEAR:
-            boundarynodes[1,1] = number_of_elements
-        if self.basis_function_type_trial == Basis.QUADRATIC:
-            boundarynodes[1,1] = 2*number_of_elements
-        return boundarynodes
+    
+    def generate_boundary_quadratic(self):
+        boundary_edges = np.zeros((2*(self.Nx+self.Ny), 5),dtype=int)
+        _, Tb = self.generate_Pb_Tb()
+        # boundary edge on the x-axis
+        for i in range(2*(self.Nx+self.Ny)):
+            if i<self.Nx:
+                # number of the element
+                n = i*(2*self.Ny) + 1
+                n = n-1
+                boundary_edges[i, 0] = Boundary.DIRICHLET_BOUNDARY
+                boundary_edges[i, 1] = n
+                boundary_edges[i, 2] = Tb[n, 0]
+                boundary_edges[i, 3] = Tb[n, 1]
+                boundary_edges[i, 4] = Tb[n, 3]
+            elif i>=self.Nx and i<self.Nx+self.Ny:
+                # number of the element
+                n = (self.Nx-1)*(2*self.Ny) + 2*(i-self.Nx + 1)
+                n = n-1
+                boundary_edges[i, 0] = Boundary.DIRICHLET_BOUNDARY
+                boundary_edges[i, 1] = n
+                boundary_edges[i, 2] = Tb[n, 1]
+                boundary_edges[i, 3] = Tb[n, 2]
+                boundary_edges[i, 4] = Tb[n, 4]
+            elif i>=self.Nx+self.Ny and i<2*self.Nx+self.Ny:
+                # number of the element
+                n = (self.Nx-(i-self.Nx-self.Ny))*2*self.Ny
+                n = n-1
+                boundary_edges[i, 0] = Boundary.DIRICHLET_BOUNDARY
+                boundary_edges[i, 1] = n
+                boundary_edges[i, 2] = Tb[n, 2]
+                boundary_edges[i, 3] = Tb[n, 0]
+                boundary_edges[i, 4] = Tb[n, 3]
+            elif i>=2*self.Nx+self.Ny and i<2*self.Nx+2*self.Ny:
+                # number of the element
+                n = 2*(self.Ny-(i-self.Nx-self.Nx-self.Ny))-1
+                n = n-1
+                boundary_edges[i, 0] = Boundary.DIRICHLET_BOUNDARY
+                boundary_edges[i, 1] = n
+                boundary_edges[i, 2] = Tb[n, 2]
+                boundary_edges[i, 3] = Tb[n, 0]
+                boundary_edges[i, 4] = Tb[n, 5]
+        return boundary_edges
     
     def solve(self):
         P, T = self.generate_P_T()
-        Pb_trial, Tb_trial = self.generate_Pb_Tb_trial()
-        Pb_test, Tb_test = self.generate_Pb_Tb_test()
-        boundary_nodes = self.generate_boundary_nodes()
-        derivative_order_trial = 1
-        derivative_order_test = 1
-        A = assemble_matrix_A_1D(P, T, Tb_trial, Tb_test, self.coefficient_function, self.basis_function_trial, self.basis_function_test, \
-                        derivative_order_trial, derivative_order_test, Gaussian_Integral_1D_N=self.Gaussian_Integral_1D_N)
-        b = assemble_vector_b_1D(P, T, Tb_test, self.source_function, self.basis_function_test, Gaussian_Integral_1D_N=self.Gaussian_Integral_1D_N)
-        A, b = treat_Dirichlet_boundary_1D(Pb_trial, A, b, boundary_nodes, self.dirichlet_boundary)
-        A, b = treat_Robin_boundary_1D(Pb_trial, Tb_trial, Tb_test, A, b, boundary_nodes, self.coefficient_function, \
-                                       self.robin_boundary_p, self.robin_boundary_q, self.basis_function_trial, self.basis_function_test)
+        Pb, Tb = self.generate_Pb_Tb()
+        boundary_edges = self.generate_boundary_edges()
+        A = assemble_matrix_A_2D(P, T, Pb, Tb, self.coefficient_function, self.basis_function, \
+                        Gaussian_Integral_triangular_2D_N=self.Gaussian_Integral_triangular_2D_N)
+        b = assemble_vector_b_2D(P, T, Tb, self.source_function, self.basis_function, Gaussian_Integral_triangular_2D_N=self.Gaussian_Integral_triangular_2D_N)
+        A, b = treat_Dirichlet_boundary_2D(Pb, Tb, A, b, boundary_edges, self.dirichlet_boundary)
+        A, b = treat_Neumann_boundary_2D(P, T, Pb, Tb, A, b, boundary_edges, self.coefficient_function, \
+                                           self.neumann_boundary, self.basis_function, self.Gaussian_Integral_triangular_2D_N)
+        uh = scipy.sparse.linalg.spsolve(A.tocsc(), b.tocsc())
+        # uh = scipy.sparse.linalg.lsqr(A.tocsc(), b.tocsc())
+        return uh
+
+
+class Possion_2D_FE_solver_Robin(Base_2D_Solver):
+    def __init__(self, bounds, Nx, Ny, basis_function_type, coefficient_function, source_function, Gaussian_Integral_triangular_2D_N=10):
+        '''
+        bounds: the bounds of problems in a rectangular domain
+        Nx, Ny: the number of partition on each axis
+        the order used in Gaussian Integrals
+        basis_function_type: linear, quadratic
+        '''
+        super(Possion_2D_FE_solver_Robin, self).__init__(bounds, Nx, Ny, basis_function_type, Gaussian_Integral_triangular_2D_N)
+        self.coefficient_function = coefficient_function
+        self.source_function = source_function
+        
+        self.uh = None
+    
+    def dirichlet_boundary(self, x, y):
+        if np.abs(x-self.a)<1e-15:
+            u = np.exp(-1+y)
+        elif np.abs(x-self.b)<1e-15:
+            u = np.exp(1+y)
+        elif np.abs(y-self.d)<1e-15:
+            u = np.exp(x+1)
+        else:
+            ValueError('No boundary edges!')
+        return u
+    
+    def robin_boundary(self, x, y, type):
+        # type=0: the function before u.
+        # type=1: the function on the right hand.
+        if type==0:
+            return 1
+        elif type==1:
+            if np.abs(y-self.c)<1e-15:
+                u = 0
+            else:
+                ValueError('No boundary edges!')
+        else:
+            ValueError('The type is not correct!')
+        return u
+    
+    def generate_boundary_edges(self):
+        #boundary_edges[i,0] is the type of the k-th boundary edge ek:
+        # Dirichlet, Neumann, Robin
+        #boundary_edges[i,1] is the index of the element which contains the k-th boundary edge ek
+        # Each boundary edge has two end nodes. We index them as the first and the second counterclock wise along the boundary.
+        # boundary_edges[i, 2] is the global node index of the first end node of the k-th boundary edge ek.
+        # boundary_edges[i, 3] is the global node index of the second end node of the k-th boundary edge ek.
+        if self.basis_function_type == Basis.LINEAR:
+            boundary_edges = self.generate_boundary_linear()
+        elif self.basis_function_type == Basis.QUADRATIC:
+            boundary_edges = self.generate_boundary_quadratic()
+        return boundary_edges
+
+    def generate_boundary_linear(self):
+        boundary_edges = np.zeros((2*(self.Nx+self.Ny), 4),dtype=int)
+        _, Tb = self.generate_Pb_Tb()
+        # boundary edge on the x-axis
+        for i in range(2*(self.Nx+self.Ny)):
+            if i<self.Nx:
+                # number of the element
+                n = i*(2*self.Ny) + 1
+                n = n-1
+                boundary_edges[i, 0] = Boundary.NEUMANN_BOUNDARY
+                boundary_edges[i, 1] = n
+                boundary_edges[i, 2] = Tb[n, 0]
+                boundary_edges[i, 3] = Tb[n, 1]
+            elif i>=self.Nx and i<self.Nx+self.Ny:
+                # number of the element
+                n = (self.Nx-1)*(2*self.Ny) + 2*(i-self.Nx + 1)
+                n = n-1
+                boundary_edges[i, 0] = Boundary.DIRICHLET_BOUNDARY
+                boundary_edges[i, 1] = n
+                boundary_edges[i, 2] = Tb[n, 1]
+                boundary_edges[i, 3] = Tb[n, 2]
+            elif i>=self.Nx+self.Ny and i<2*self.Nx+self.Ny:
+                # number of the element
+                n = (self.Nx-(i-self.Nx-self.Ny))*2*self.Ny
+                n = n-1
+                boundary_edges[i, 0] = Boundary.DIRICHLET_BOUNDARY
+                boundary_edges[i, 1] = n
+                boundary_edges[i, 2] = Tb[n, 2]
+                boundary_edges[i, 3] = Tb[n, 0]
+            elif i>=2*self.Nx+self.Ny and i<2*self.Nx+2*self.Ny:
+                # number of the element
+                n = 2*(self.Ny-(i-self.Nx-self.Nx-self.Ny))-1
+                n = n-1
+                boundary_edges[i, 0] = Boundary.DIRICHLET_BOUNDARY
+                boundary_edges[i, 1] = n
+                boundary_edges[i, 2] = Tb[n, 2]
+                boundary_edges[i, 3] = Tb[n, 0]
+        return boundary_edges
+    
+    
+    def generate_boundary_quadratic(self):
+        boundary_edges = np.zeros((2*(self.Nx+self.Ny), 5),dtype=int)
+        _, Tb = self.generate_Pb_Tb()
+        # boundary edge on the x-axis
+        for i in range(2*(self.Nx+self.Ny)):
+            if i<self.Nx:
+                # number of the element
+                n = i*(2*self.Ny) + 1
+                n = n-1
+                boundary_edges[i, 0] = Boundary.DIRICHLET_BOUNDARY
+                boundary_edges[i, 1] = n
+                boundary_edges[i, 2] = Tb[n, 0]
+                boundary_edges[i, 3] = Tb[n, 1]
+                boundary_edges[i, 4] = Tb[n, 3]
+            elif i>=self.Nx and i<self.Nx+self.Ny:
+                # number of the element
+                n = (self.Nx-1)*(2*self.Ny) + 2*(i-self.Nx + 1)
+                n = n-1
+                boundary_edges[i, 0] = Boundary.DIRICHLET_BOUNDARY
+                boundary_edges[i, 1] = n
+                boundary_edges[i, 2] = Tb[n, 1]
+                boundary_edges[i, 3] = Tb[n, 2]
+                boundary_edges[i, 4] = Tb[n, 4]
+            elif i>=self.Nx+self.Ny and i<2*self.Nx+self.Ny:
+                # number of the element
+                n = (self.Nx-(i-self.Nx-self.Ny))*2*self.Ny
+                n = n-1
+                boundary_edges[i, 0] = Boundary.DIRICHLET_BOUNDARY
+                boundary_edges[i, 1] = n
+                boundary_edges[i, 2] = Tb[n, 2]
+                boundary_edges[i, 3] = Tb[n, 0]
+                boundary_edges[i, 4] = Tb[n, 3]
+            elif i>=2*self.Nx+self.Ny and i<2*self.Nx+2*self.Ny:
+                # number of the element
+                n = 2*(self.Ny-(i-self.Nx-self.Nx-self.Ny))-1
+                n = n-1
+                boundary_edges[i, 0] = Boundary.DIRICHLET_BOUNDARY
+                boundary_edges[i, 1] = n
+                boundary_edges[i, 2] = Tb[n, 2]
+                boundary_edges[i, 3] = Tb[n, 0]
+                boundary_edges[i, 4] = Tb[n, 5]
+        return boundary_edges
+    
+    def solve(self):
+        P, T = self.generate_P_T()
+        Pb, Tb = self.generate_Pb_Tb()
+        boundary_edges = self.generate_boundary_edges()
+        A = assemble_matrix_A_2D(P, T, Pb, Tb, self.coefficient_function, self.basis_function, \
+                        Gaussian_Integral_triangular_2D_N=self.Gaussian_Integral_triangular_2D_N)
+        b = assemble_vector_b_2D(P, T, Tb, self.source_function, self.basis_function, Gaussian_Integral_triangular_2D_N=self.Gaussian_Integral_triangular_2D_N)
+        A, b = treat_Dirichlet_boundary_2D(Pb, Tb, A, b, boundary_edges, self.dirichlet_boundary)
+        A, b = treat_Robin_boundary_2D(P, T, Pb, Tb, A, b, boundary_edges, self.coefficient_function, \
+                                           self.robin_boundary, self.basis_function, self.Gaussian_Integral_triangular_2D_N)
         uh = scipy.sparse.linalg.spsolve(A.tocsc(), b.tocsc())
         # uh = scipy.sparse.linalg.lsqr(A.tocsc(), b.tocsc())
         return uh

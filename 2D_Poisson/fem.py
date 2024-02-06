@@ -1,179 +1,203 @@
 import numpy as np
 from scipy.sparse import csr_matrix, lil_matrix
-from integration import Gaussian_Integral_1D
-from basis import affine_x
+from integration import Gaussian_Integral_1D, Gaussian_Integral_triangular_2D
+from basis import affine_triangular_xy
 
 class Boundary:
     DIRICHLET_BOUNDARY = 0
     NEUMANN_BOUNDARY = 1
     ROBIN_BOUNDARY = 2
 
-def assemble_matrix_A_1D(P, T, Tb_trial, Tb_test, coefficient_function, basis_function_trial, basis_function_test, \
-                         derivative_order_trial, derivative_order_test, Gaussian_Integral_1D_N=3):
-    '''
-    P: Information matrix to store the coordinates of the mesh node
-    T: Information matrix to store the global node indices of the mesh nodes of the mesh element
-    Tb_trial: Information matrix for the finite element nodes corresponding to the basis functions in the trial space
-    Tb_test: Information matrix for the finite element nodes corresponding to the basis functions in the test space
-    coefficient_function: coefficient function in the integral
-    basis_function_trial: The basis functions in the trial space
-    basis_function_test: The basis functions in the test space
-    derivative_order_trial: The derivative order of the trial function
-    derivative_order_test: The derivative order of the test function
-    Gaussian_Integral_1D_N: The number of points which is used in Gaussian Integral and the default value is 3 
-    return A: stiffness matrix A
-    '''
-
-    # N_trial:  the total number of the finite element basis functions in the trial space
-    N_global_trial = np.max(Tb_trial) + 1
-    # N_test:  the total number of the finite element basis functions in the test space
-    N_globa_test = np.max(Tb_test) + 1
-    
-    # N_trial:  the total number of the trial functions in the local space
-    N_local_trial = Tb_trial.shape[1]
-    # N_test:  the total number of the test functions in the local space
-    N_local_test  = Tb_test.shape[1]
-
+def assemble_matrix_A_2D(P, T, Pb, Tb, coefficient_function, basis_function, Gaussian_Integral_triangular_2D_N=10):
+    # the number of local basis functions
+    Nl = Tb.shape[1]
+    # the number of finite elements
+    Nb = Tb.shape[0]
+    # the number of nodes
+    Ng = np.max(Tb) + 1
     # define a sparse matrix
-    A = lil_matrix((N_globa_test, N_global_trial))
-    number_of_elements = T.shape[0]
-    for i in range(number_of_elements):
-        for alpha in range(N_local_trial):
-            for beta in range(N_local_test):
-                # lower bound
-                x_i = P[T[i, 0]]
-                # upper bound
-                x_ip = P[T[i, 1]]
-                f_integral = lambda x : coefficient_function(x) * \
-                        basis_function_trial(affine_x(x_i, x_ip, x, derivative_order=0), alpha, derivative_order_trial) * \
-                        basis_function_test(affine_x(x_i, x_ip, x, derivative_order=0), beta, derivative_order_test) * \
-                        affine_x(x_i, x_ip, x, derivative_order=derivative_order_trial) * \
-                        affine_x(x_i, x_ip, x, derivative_order=derivative_order_test)
+    A = lil_matrix((Ng, Ng))
+    for i in range(Nb):
+        vertices = np.array([[P[T[i, 0], 0], P[T[i, 0], 1]], [P[T[i, 1], 0], P[T[i, 1], 1]], [P[T[i, 2], 0], P[T[i, 2], 1]]])
+        for j in range(Nl):
+            for k in range(Nl):
+                def f_integral(x, y):
+                    coe = coefficient_function(x, y)
+                    new_x, new_y = affine_triangular_xy(x, y, vertices, derivative_order_x=0, derivative_order_y=0)
+                    ux = basis_function(new_x, new_y, j, derivative_order_x=1, derivative_order_y=0)
+                    uy = basis_function(new_x, new_y, j, derivative_order_x=0, derivative_order_y=1)
+                    vx = basis_function(new_x, new_y, k, derivative_order_x=1, derivative_order_y=0)
+                    vy = basis_function(new_x, new_y, k, derivative_order_x=0, derivative_order_y=1)
+                    [xhat_x, yhat_x] = affine_triangular_xy(x, y, vertices, derivative_order_x=1, derivative_order_y=0)
+                    [xhat_y, yhat_y] = affine_triangular_xy(x, y, vertices, derivative_order_x=0, derivative_order_y=1)
+                    result = coe* ((ux*xhat_x + uy*yhat_x)*(vx*xhat_x + vy*yhat_x) + (ux*xhat_y + uy*yhat_y)*(vx*xhat_y + vy*yhat_y))
+                    return result
                 # Gaussian Integral
-                integral = Gaussian_Integral_1D(x_i, x_ip, f_integral, Gaussian_Integral_1D_N)
-                A[Tb_test[i, beta], Tb_trial[i, alpha]] += integral
+                integral = Gaussian_Integral_triangular_2D(vertices, f_integral, Gaussian_Integral_triangular_2D_N)
+                A[Tb[i, k], Tb[i, j]] += integral
     return A
 
-def assemble_vector_b_1D(P, T, Tb_test, source_function, basis_function_test, Gaussian_Integral_1D_N=3):
-    '''
-    P: Information matrix to store the coordinates of the mesh node
-    T: Information matrix to store the global node indices of the mesh nodes of the mesh element
-    Tb_test: Information matrix for the finite element nodes corresponding to the basis functions in the test space
-    basis_function_test: The basis functions in the test space
-    Gaussian_Integral_1D_N: The number of points which is used in Gaussian Integral and the default value is 3 
-    return b: load vector b
-    '''
-    # N_test:  the total number of the finite element basis functions in the test space
-    N_globa_test = np.max(Tb_test) + 1
-    # N_test:  the total number of the test functions in the local space
-    N_local_test  = Tb_test.shape[1]
+def assemble_vector_b_2D(P, T, Tb, source_function, basis_function, Gaussian_Integral_triangular_2D_N=10):
+    # the number of local basis functions
+    Nl = Tb.shape[1]
+    # the number of finite elements
+    Nb = T.shape[0]
+    # the number of nodes
+    Ng = np.max(Tb) + 1
     # define a sparse matrix
-    b = lil_matrix((N_globa_test, 1))
-    number_of_elements = T.shape[0]
-    for i in range(number_of_elements):
-        for beta in range(N_local_test):
-            # lower bound
-            x_i = P[T[i, 0]]
-            # upper bound
-            x_ip = P[T[i, 1]]
-            f_integral = lambda x : source_function(x) * \
-                    basis_function_test(affine_x(x_i, x_ip, x, derivative_order=0), beta, 0)
+    b = lil_matrix((Ng, 1))
+    for i in range(Nb):
+        vertices = np.array([[P[T[i, 0], 0], P[T[i, 0], 1]], [P[T[i, 1], 0], P[T[i, 1], 1]], [P[T[i, 2], 0], P[T[i, 2], 1]]])
+        for j in range(Nl):
+            def f_integral(x, y): 
+                new_x, new_y = affine_triangular_xy(x, y, vertices, derivative_order_x=0, derivative_order_y=0)
+                result = source_function(x, y) * basis_function(new_x, new_y, j, derivative_order_x=0, derivative_order_y=0)
+                return result
             # Gaussian Integral
-            integral = Gaussian_Integral_1D(x_i, x_ip, f_integral, Gaussian_Integral_1D_N)
-            b[Tb_test[i, beta], 0] += integral
+            integral = Gaussian_Integral_triangular_2D(vertices, f_integral, Gaussian_Integral_triangular_2D_N)
+            b[Tb[i, j], 0] += integral
     return b
 
-def treat_Dirichlet_boundary_1D(Pb_trial, A, b, boundary_nodes, boundary_function):
-    '''
-    Pb_trial: Information matrix to store the coordinates of the mesh node used in the trial function
-    A: stiffness matrix
-    b: load vector
-    boundary_nodes: nodes on the boundary
-    boundary_function: function on the boundary
-    '''
-    #boundarynodes[i,0] 表示第i个边界点的边界类型:
-    #0-- dirichlet, 1--neumann, 2--robin
-    #boundarynodes[i,1] 表示第i个边界点的全局坐标
-    nodes_N = boundary_nodes.shape[0]
-    for i in range(nodes_N):
-        if boundary_nodes[i, 0] == Boundary.DIRICHLET_BOUNDARY:
-            j = boundary_nodes[i, 1]
-            A[j] = 0
-            A[j, j] = 1
-            b[j, 0] = boundary_function(Pb_trial[j])
+def treat_Dirichlet_boundary_2D(Pb, Tb, A, b, boundary_edges, boundary_function):
+    # the number of boundary node on edge ek
+    B_size = boundary_edges.shape[1]
+    # the number of boundary nodes
+    N_nodes = boundary_edges.shape[0]
+    for i in range(N_nodes):
+        if boundary_edges[i, 0] == Boundary.DIRICHLET_BOUNDARY:
+            for j in range(2, B_size):
+                index = boundary_edges[i, j]
+                x = Pb[index, 0]
+                y = Pb[index, 1]
+                A[index] = 0
+                A[index, index] = 1
+                b[index, 0] = boundary_function(x, y)
     return A, b
 
 
-def treat_Neumann_boundary_1D(Pb_trial, Tb_test, A, b, boundary_nodes, coefficient_function, boundary_function, basis_function_test):
-    '''
-    Pb_trial: Information matrix to store the coordinates of the mesh node used in the trial function
-    A: stiffness matrix
-    b: load vector
-    boundary_nodes: nodes on the boundary
-    boundary_function: function on the boundary
-    '''
-    #boundarynodes[i,0] 表示第i个边界点的边界类型:
-    #0-- dirichlet, 1--neumann, 2--robin
-
-    # N_test:  the total number of the test functions in the local space
-    N_local_test = Tb_test.shape[1]
-    #boundarynodes[i,1] 表示第i个边界点的全局坐标
-    nodes_N = boundary_nodes.shape[0]
-    for i in range(nodes_N):
-        if boundary_nodes[i, 0] == Boundary.NEUMANN_BOUNDARY:
-            j = boundary_nodes[i, 1]
-            normal_direction = boundary_nodes[i, 2]
-            if j == 0:
-                x_i = Pb_trial[j]
-                x_ip = Pb_trial[j+N_local_test-1]
-            else:
-                # lower bound
-                x_i = Pb_trial[j-N_local_test+1]
-                # upper bound
-                x_ip = Pb_trial[j]
-            for beta in range(N_local_test):
-                b[j, 0] += normal_direction*coefficient_function(Pb_trial[j]) * boundary_function(Pb_trial[j]) * \
-                        basis_function_test(affine_x(x_i, x_ip, Pb_trial[j], derivative_order=0), beta, 0)
+def treat_Neumann_boundary_2D(P, T, Pb, Tb, A, b, boundary_edges, coefficient_function, boundary_function, basis_function, Gaussian_Integral_1D_N):
+    # the number of local basis functions
+    Nl = Tb.shape[1]
+    # the number of finite elements
+    Nb = T.shape[0]
+    # the number of boundary nodes
+    N_nodes = boundary_edges.shape[0]
+    for i in range(N_nodes):
+        if boundary_edges[i, 0] == Boundary.NEUMANN_BOUNDARY:
+            j = boundary_edges[i, 1]
+            index1 = boundary_edges[i, 2]
+            index2 = boundary_edges[i, -1]        
+            x1 = Pb[index1, 0]
+            y1 = Pb[index1, 1]
+            x2 = Pb[index2, 0]
+            y2 = Pb[index2, 1]
+            vertices = np.array([[P[T[j, 0], 0], P[T[j, 0], 1]], [P[T[j, 1], 0], P[T[j, 1], 1]], [P[T[j, 2], 0], P[T[j, 2], 1]]])
+            for k in range(Nl):                    
+                if x1==x2:
+                    if y1<=y2:
+                        lower_bound = y1
+                        upper_bound = y2
+                    else:
+                        lower_bound = y2
+                        upper_bound = y1
+                    def f_integral(y): 
+                        x = x1
+                        new_x, new_y = affine_triangular_xy(x, y, vertices, derivative_order_x=0, derivative_order_y=0)
+                        result = coefficient_function(x, y) * boundary_function(x, y) * basis_function(new_x, new_y, k, derivative_order_x=0, derivative_order_y=0)
+                        return result
+                elif y1==y2:
+                    if x1<=x2:
+                        lower_bound = x1
+                        upper_bound = x2
+                    else:
+                        lower_bound = x2
+                        upper_bound = x1
+                    def f_integral(x): 
+                        y = y1
+                        new_x, new_y = affine_triangular_xy(x, y, vertices, derivative_order_x=0, derivative_order_y=0)
+                        result = coefficient_function(x, y) * boundary_function(x, y) * basis_function(new_x, new_y, k, derivative_order_x=0, derivative_order_y=0)
+                        return result
+                # Gaussian Integral
+                integral = Gaussian_Integral_1D(lower_bound, upper_bound, f_integral, Gaussian_Integral_1D_N)
+                b[Tb[j, k], 0] += integral
     return A, b
 
 
-def treat_Robin_boundary_1D(Pb_trial, Tb_trial, Tb_test, A, b, boundary_nodes, coefficient_function, boundary_function_p, boundary_function_q, \
-                            basis_function_trial, basis_function_test):
-    '''
-    Pb_trial: Information matrix to store the coordinates of the mesh node used in the trial function
-    A: stiffness matrix
-    b: load vector
-    boundary_nodes: nodes on the boundary
-    boundary_function: function on the boundary
-    '''
-    #boundarynodes[i,0] 表示第i个边界点的边界类型:
-    #0-- dirichlet, 1--neumann, 2--robin
-
-    # N_trial:  the total number of the trial functions in the local space
-    N_local_trial = Tb_trial.shape[1]
-    # N_test:  the total number of the test functions in the local space
-    N_local_test = Tb_test.shape[1]
-    #boundarynodes[i,1] 表示第i个边界点的全局坐标
-    nodes_N = boundary_nodes.shape[0]
-    
-    for i in range(nodes_N):
-        if boundary_nodes[i, 0] == Boundary.ROBIN_BOUNDARY:
-            j = boundary_nodes[i, 1]  
-            normal_direction = boundary_nodes[i, 2]          
-            if j == 0:
-                x_i = Pb_trial[j]
-                x_ip = Pb_trial[j+N_local_test-1]
-            else:
-                # lower bound
-                x_i = Pb_trial[j-N_local_test+1]
-                # upper bound
-                x_ip = Pb_trial[j]
-            for alpha in range(N_local_trial):
-                for beta in range(N_local_test):
-                    A[Tb_test[j, beta], Tb_trial[j, alpha]] += normal_direction * coefficient_function(Pb_trial[j]) * boundary_function_q(Pb_trial[j]) * \
-                        basis_function_trial(affine_x(x_i, x_ip, Pb_trial[j], derivative_order=0), alpha, 0) * \
-                        basis_function_test(affine_x(x_i, x_ip, Pb_trial[j], derivative_order=0), beta, 0)
-            for beta in range(N_local_test):
-                b[j, 0] += normal_direction*coefficient_function(Pb_trial[j]) * boundary_function_p(Pb_trial[j]) * \
-                        basis_function_test(affine_x(x_i, x_ip, Pb_trial[j], derivative_order=0), beta, 0)
+def treat_Robin_boundary_2D(P, T, Pb, Tb, A, b, boundary_edges, coefficient_function, boundary_function, basis_function, Gaussian_Integral_1D_N):
+    # the number of local basis functions
+    Nl = Tb.shape[1]
+    # the number of finite elements
+    Nb = T.shape[0]
+    # the number of boundary nodes
+    N_nodes = boundary_edges.shape[0]
+    for i in range(N_nodes):
+        if boundary_edges[i, 0] == Boundary.ROBIN_BOUNDARY:
+            j = boundary_edges[i, 1]
+            index1 = boundary_edges[i, 2]
+            index2 = boundary_edges[i, -1]        
+            x1 = Pb[index1, 0]
+            y1 = Pb[index1, 1]
+            x2 = Pb[index2, 0]
+            y2 = Pb[index2, 1]
+            vertices = np.array([[P[T[j, 0], 0], P[T[j, 0], 1]], [P[T[j, 1], 0], P[T[j, 1], 1]], [P[T[j, 2], 0], P[T[j, 2], 1]]])
+            for k in range(Nl):                    
+                if x1==x2:
+                    if y1<=y2:
+                        lower_bound = y1
+                        upper_bound = y2
+                    else:
+                        lower_bound = y2
+                        upper_bound = y1
+                    def f_integral(y): 
+                        x = x1
+                        new_x, new_y = affine_triangular_xy(x, y, vertices, derivative_order_x=0, derivative_order_y=0)
+                        result = coefficient_function(x, y) * boundary_function(x, y, type=1) * basis_function(new_x, new_y, k, derivative_order_x=0, derivative_order_y=0)
+                        return result
+                elif y1==y2:
+                    if x1<=x2:
+                        lower_bound = x1
+                        upper_bound = x2
+                    else:
+                        lower_bound = x2
+                        upper_bound = x1
+                    def f_integral(x): 
+                        y = y1
+                        new_x, new_y = affine_triangular_xy(x, y, vertices, derivative_order_x=0, derivative_order_y=0)
+                        result = coefficient_function(x, y) * boundary_function(x, y, type=1) * basis_function(new_x, new_y, k, derivative_order_x=0, derivative_order_y=0)
+                        return result
+                # Gaussian Integral
+                integral = Gaussian_Integral_1D(lower_bound, upper_bound, f_integral, Gaussian_Integral_1D_N)
+                b[Tb[j, k], 0] += integral
+                
+                for l in range(Nl):                
+                    if x1==x2:
+                        if y1<=y2:
+                            lower_bound = y1
+                            upper_bound = y2
+                        else:
+                            lower_bound = y2
+                            upper_bound = y1
+                        def f_integral(y): 
+                            x = x1
+                            new_x, new_y = affine_triangular_xy(x, y, vertices, derivative_order_x=0, derivative_order_y=0)
+                            result = coefficient_function(x, y) * boundary_function(x, y, type=0) * \
+                                basis_function(new_x, new_y, k, derivative_order_x=0, derivative_order_y=0) * \
+                                basis_function(new_x, new_y, l, derivative_order_x=0, derivative_order_y=0)
+                            return result
+                    elif y1==y2:
+                        if x1<=x2:
+                            lower_bound = x1
+                            upper_bound = x2
+                        else:
+                            lower_bound = x2
+                            upper_bound = x1
+                        def f_integral(x): 
+                            y = y1
+                            new_x, new_y = affine_triangular_xy(x, y, vertices, derivative_order_x=0, derivative_order_y=0)
+                            result = coefficient_function(x, y) * boundary_function(x, y, type=0) * \
+                                basis_function(new_x, new_y, k, derivative_order_x=0, derivative_order_y=0) * \
+                                basis_function(new_x, new_y, l, derivative_order_x=0, derivative_order_y=0)
+                            return result
+                    integral = Gaussian_Integral_1D(lower_bound, upper_bound, f_integral, Gaussian_Integral_1D_N)
+                    A[Tb[j, l], Tb[j, k]] += integral
     return A, b

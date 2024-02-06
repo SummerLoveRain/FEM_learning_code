@@ -15,7 +15,7 @@ def basis_reference_linear_1D(x, basis_index, derivative_order):
             result = 1 - x
         elif derivative_order == 1:
             result = -1
-        elif derivative_order >=2 & type(derivative_order)==int:
+        elif derivative_order >=2 and type(derivative_order)==int:
             result = 0
         else:
             ValueError("The derivative order is not correct!")
@@ -24,7 +24,7 @@ def basis_reference_linear_1D(x, basis_index, derivative_order):
             result = x
         elif derivative_order == 1:
             result = 1
-        elif derivative_order >=2 & type(derivative_order)==int:
+        elif derivative_order >=2 and type(derivative_order)==int:
             result = 0
         else:
             ValueError("The derivative order is not correct!")
@@ -46,7 +46,7 @@ def basis_reference_quadratic_1D(x, basis_index, derivative_order):
             result = 4*x - 3
         elif derivative_order ==2:
             result = 4
-        elif derivative_order >=3 & type(derivative_order)==int:
+        elif derivative_order >=3 and type(derivative_order)==int:
             result = 0
         else:
             ValueError("The derivative order is not correct!")
@@ -57,7 +57,7 @@ def basis_reference_quadratic_1D(x, basis_index, derivative_order):
             result = 4*x - 1
         elif derivative_order ==2:
             result = 4
-        elif derivative_order >=3 & type(derivative_order)==int:
+        elif derivative_order >=3 and type(derivative_order)==int:
             result = 0
         else:
             ValueError("The derivative order is not correct!")
@@ -68,7 +68,7 @@ def basis_reference_quadratic_1D(x, basis_index, derivative_order):
             result = -8*x + 4
         elif derivative_order ==2:
             result = -8
-        elif derivative_order >=3 & type(derivative_order)==int:
+        elif derivative_order >=3 and type(derivative_order)==int:
             result = 0
         else:
             ValueError("The derivative order is not correct!")
@@ -93,7 +93,7 @@ def basis_reference_quadratic_1D(x, basis_index, derivative_order):
 #             result = 12*x - 6
 #         elif derivative_order ==3:
 #             result = 12
-#         elif derivative_order >=4 & type(derivative_order)==int:
+#         elif derivative_order >=4 and type(derivative_order)==int:
 #             result = 0
 #         else:
 #             ValueError("The derivative order is not correct!")
@@ -106,7 +106,7 @@ def basis_reference_quadratic_1D(x, basis_index, derivative_order):
 #             result = -12*x + 6
 #         elif derivative_order ==3:
 #             result = -12
-#         elif derivative_order >=4 & type(derivative_order)==int:
+#         elif derivative_order >=4 and type(derivative_order)==int:
 #             result = 0
 #         else:
 #             ValueError("The derivative order is not correct!")
@@ -119,7 +119,7 @@ def basis_reference_quadratic_1D(x, basis_index, derivative_order):
 #             result = 6*x - 4
 #         elif derivative_order ==3:
 #             result = 6
-#         elif derivative_order >=4 & type(derivative_order)==int:
+#         elif derivative_order >=4 and type(derivative_order)==int:
 #             result = 0
 #         else:
 #             ValueError("The derivative order is not correct!")
@@ -132,7 +132,7 @@ def basis_reference_quadratic_1D(x, basis_index, derivative_order):
 #             result = 6*x - 2
 #         elif derivative_order ==3:
 #             result = 6
-#         elif derivative_order >=4 & type(derivative_order)==int:
+#         elif derivative_order >=4 and type(derivative_order)==int:
 #             result = 0
 #         else:
 #             ValueError("The derivative order is not correct!")
@@ -152,7 +152,7 @@ def affine_x(a, b, x, derivative_order):
         result = (x-a)/(b-a)
     elif derivative_order == 1:
         result = 1/(b-a)
-    elif derivative_order >=2 & type(derivative_order)==int:
+    elif derivative_order >=2 and type(derivative_order)==int:
         result = 0
     else:
         ValueError("The derivative order is not correct!")

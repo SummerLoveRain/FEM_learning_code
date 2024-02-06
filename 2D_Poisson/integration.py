@@ -1130,12 +1130,11 @@ def Gaussian_Integral_triangular_2D(vertices, f, n):
     Jy1 = y2-y1
     Jy2 = y3-y1
     J = Jx1*Jy2 - Jx2*Jy1
-    J_denominator = Jx1*Jy2 - Jx2*Jy1
     def shift_xy(node):
         x = node[:, 0]
         y = node[:, 1]
-        new_x = (Jx1*J*x + Jx2*J*y)/J_denominator + x1
-        new_y = (Jy1*J*x + Jy2*J*y)/J_denominator + y1
+        new_x = (Jx1*x + Jx2*y) + x1
+        new_y = (Jy1*x + Jy2*y) + y1
         return new_x, new_y
 
     if n==1:
@@ -1425,5 +1424,19 @@ def Gaussian_Integral_triangular_2D(vertices, f, n):
 #     # f2 = lambda x, y: 1/np.sqrt((1+x)**2+y**2)
 #     vertices = np.array([[0, 0], [2, 0], [0, 2]],dtype=np.float64)
 #     I = 1.120666910443430
+#     integral = Gaussian_Integral_triangular_2D(vertices, f2, n)
+#     print('f2 n:%d I: %f integral: %f error: %10.6e' % (n, I, integral, abs(I-integral)))
+
+# print('\n')
+
+# for i in range(N_Max):
+#     n = i+1
+#     def f2(x, y):
+#         u = x**2 + y**2
+#         return u
+#     # I = 0.052734375000001
+#     # vertices = np.array([[-1, -1], [-0.75, -1], [-1, -0.75]],dtype=np.float64)
+#     I = 0.043619791666666
+#     vertices = np.array([[-1., -0.75], [-0.75, -1.], [-0.75, -0.75]])
 #     integral = Gaussian_Integral_triangular_2D(vertices, f2, n)
 #     print('f2 n:%d I: %f integral: %f error: %10.6e' % (n, I, integral, abs(I-integral)))
