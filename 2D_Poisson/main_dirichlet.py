@@ -25,10 +25,6 @@ def source_function(x, y):
     sour = -y*(1-y)*(1-x-x**2/2)*np.exp(x+y)-x*(1-x/2)*(-3*y-y**2)*np.exp(x+y)
     return sour
 
-def p_function(x, y):
-    p = -np.exp(x-1)
-    return p
-
 if __name__ == '__main__':
 
     for i in range(5):
